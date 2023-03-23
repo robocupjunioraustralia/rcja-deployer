@@ -2,7 +2,6 @@ const { exec } = require('child_process');
 const express = require("express");
 const bodyParser = require("body-parser");
 const morgan = require("morgan");
-// const githubhook = require('express-github-webhook');
 const dotenv = require("dotenv");
 const util = require('util');
 const path = require("path");
@@ -12,8 +11,6 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const nodemailer = require('nodemailer');
 dotenv.config();
-
-// const webhookHandler = githubhook({ path: '/deploy', secret: process.env.DEPLOY_SECRET });
 
 const app = express();
 app.set('case sensitive routing', false);
@@ -134,7 +131,7 @@ app.post('/deploy', async (req, res) => {
       return res.status(500).send('Error executing database migrations');
     }
       
-    writeLog(logMessage, true);
+    writeLog(deployLog, true);
     res.status(200).send('OK');
     disableMaintenance();
   });
