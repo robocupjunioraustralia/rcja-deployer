@@ -21,14 +21,14 @@ morgan.token('statusColor', (req, res, args) => {
   var status = (typeof res.headersSent !== 'boolean' ? Boolean(res.header) : res.headersSent)
   ? res.statusCode
   : undefined
-  
+
   // get status color
   var color = status >= 500 ? 31 // red
   : status >= 400 ? 33 // yellow
   : status >= 300 ? 36 // cyan
   : status >= 200 ? 32 // green
   : 0; // no color
-  
+
   return '\x1b[' + color + 'm' + status + '\x1b[0m';
 });
 app.use(morgan(':statusColor :method :url - :response-time ms - :remote-addr :remote-user'));
@@ -83,61 +83,76 @@ app.post('/deploy', async (req, res) => {
     return res.status(400).send('Request body is missing');
   }
   const payload = JSON.stringify(req.body);
-  
+
   // Verify the request came from GitHub using the deploy secret
   const signature = req.headers['x-hub-signature'];
   if (!signature) {
     console.log('[DEPLOYER] No signature found. Not deploying.')
     return res.status(401).send('Unauthorized');
   }
-  
+
   const hmac = crypto.createHmac('sha1', process.env.DEPLOY_SECRET);
   const digest = 'sha1=' + hmac.update(payload).digest('hex');
-  
+
   if (signature !== digest) {
     console.log('[DEPLOYER] Deploy secret does not match. Not deploying.');
     return res.status(401).send('Unauthorized');
   }
-  
-  // Check that the branch being pushed to is the master branch
-  const branch = req.body.ref.split('/').pop();
-  if (branch !== 'master') {
-    console.log(`[DEPLOYER] Push received on branch ${branch}. Not deploying.`);
+
+  const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
+
+  // Find the repository in deployments.json
+  const valid_deployments = Object.values(deployments_info).filter(d => d.repository === req.body.repository.full_name);
+  if (valid_deployments.length === 0) {
+    console.log(`[DEPLOYER] Repository ${req.body.repository.full_name} not found in deployments.json. Not deploying.`);
     return res.status(200).send('OK');
   }
-  
-  enableMaintenance();
-  deployLog = `Deployment started on ${new Date().toISOString()}\n\n`;
+  console.log(`[DEPLOYER] Received change on ${req.body.repository.full_name}...`)
+
+  // Check that the branch being pushed to is the master branch
+  const selected_deployment = valid_deployments.find(d => d.branch_ref === req.body.ref);
+  if (!selected_deployment) {
+    console.log(`[DEPLOYER] The branch ${req.body.ref} does not match a deployment config. Not deploying.`);
+    return res.status(200).send('OK');
+  }
+
+  console.log(`[DEPLOYER] Deploying ${req.body.repository.full_name} (${req.body.ref}) to ${selected_deployment.title}...`);
+  let deployLog = `--- Deploying ${req.body.repository.full_name} (${req.body.ref}) to ${selected_deployment.title} ---\n`;
+
+  enableMaintenance(selected_deployment);
+  deployLog += `Deployment started on ${new Date().toISOString()}\n\n`;
   // Execute the shell script to pull the latest changes from the master branch
-  exec(`cd ${process.env.PATH_TO_RCJCMS} && git fetch && git status && git pull origin master`, async (err, stdout, stderr) => {
+  exec(`cd ${selected_deployment.path} && git fetch && git status && git pull origin master`, async (err, stdout, stderr) => {
     if (err) {
       console.error(err);
       deployLog += `--- Error while pulling changes ---\n${err}\n${stderr}\n`;
       writeLog(deployLog, false);
       return res.status(500).send('Error executing shell script');
     }
+    console.log('[DEPLOY] Successfully pulled all changes')
+    console.log(stdout, stderr);
     deployLog += `--- Successfully pulled all changes ---\n${stdout}\n${stderr}\n`;
-    
+
     // Check for any database migrations
-    console.log('[MIGRATE] Running database migrations...')
+    console.log('[DEPLOY] Running database migrations...')
     deployLog += "\n--- RUNNING DATABASE MIGRATIONS ---\n";
-    const [migrateFailed, migrateLog] = await runDatabaseMigrations("rcj_cms");
-    console.log("[DEPLOY] Migration complete");
+    const [migrateFailed, migrateLog] = await runDatabaseMigrations(selected_deployment);
+    console.log("[DEPLOY] Migration complete: ", migrateFailed ? "FAIL" : "SUCCESS");
     deployLog += migrateLog;
     deployLog += `\n\n--- DATABASE MIGRATIONS: ${migrateFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
-  
+
     if (migrateFailed) {
       writeLog(deployLog, false);
       return res.status(500).send('Error executing database migrations');
     }
-      
+
     writeLog(deployLog, true);
     res.status(200).send('OK');
-    disableMaintenance();
+    disableMaintenance(selected_deployment);
   });
 });
 
-async function createDatabaseBackup(prefix) {
+async function createDatabaseBackup(selected_deployment) {
   let hasFailed = false;
   let backupLog = '\n\n[BACKUP] Running database backup...';
   console.log('[BACKUP] Running database backup...')
@@ -158,7 +173,7 @@ async function createDatabaseBackup(prefix) {
     fs.mkdirSync(backupFolder);
   }
 
-  const backupDir = path.join(__dirname, `backups/${prefix}_${formattedDate}`);
+  const backupDir = path.join(__dirname, `backups/${selected_deployment.database_prefix}_${formattedDate}`);
   if (!fs.existsSync(backupDir)) {
     fs.mkdirSync(backupDir);
   }
@@ -190,7 +205,7 @@ async function createDatabaseBackup(prefix) {
         hasFailed = true;
         reject(err);
       });
-    
+
       mysqldump.stderr.on('data', (data) => {
         backupLog += data;
       });
@@ -198,13 +213,13 @@ async function createDatabaseBackup(prefix) {
   }
 
   // Backup rcj_cms_main database
-  const mainDbBackupName = `backup_${prefix}_main.sql`;
+  const mainDbBackupName = `backup_${selected_deployment.database_prefix}_main.sql`;
   const mainDbBackupFile = path.join(backupDir, mainDbBackupName);
   const mainDbWstream = fs.createWriteStream(mainDbBackupFile);
-  
-  await createMySQLDump(`${prefix}_main`, mainDbWstream).catch((err) => {
-    console.error(`[BACKUP] Error creating database backup for ${prefix}_main`);
-    backupLog += `\n[BACKUP] Error creating database backup for ${prefix}_main`;
+
+  await createMySQLDump(`${selected_deployment.database_prefix}_main`, mainDbWstream).catch((err) => {
+    console.error(`[BACKUP] Error creating database backup for ${selected_deployment.database_prefix}_main`);
+    backupLog += `\n[BACKUP] Error creating database backup for ${selected_deployment.database_prefix}_main`;
     hasFailed = true;
   });
   if (hasFailed) { return [hasFailed, backupLog]; }
@@ -214,7 +229,7 @@ async function createDatabaseBackup(prefix) {
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    database: `${prefix}_main`,
+    database: `${selected_deployment.database_prefix}_main`,
   });
 
   const connectMain = util.promisify(connectionMain.connect.bind(connectionMain));
@@ -228,8 +243,8 @@ async function createDatabaseBackup(prefix) {
     connectionMain.end();
   });
   if (hasFailed) { return [hasFailed, backupLog]; }
-  console.log(`[BACKUP] Successfully connected to database ${prefix}_main`);
-  backupLog += `\n[BACKUP] Successfully connected to database ${prefix}_main`;
+  console.log(`[BACKUP] Successfully connected to database ${selected_deployment.database_prefix}_main`);
+  backupLog += `\n[BACKUP] Successfully connected to database ${selected_deployment.database_prefix}_main`;
 
   // Read the comps table to get a list of all comps
   const allComps = await queryMain('SELECT uid FROM comps').catch((err) => {
@@ -246,7 +261,7 @@ async function createDatabaseBackup(prefix) {
   for (const comp of allComps) {
     const uid = comp.uid;
 
-    const dbName = `${prefix}_comp_${uid}`;
+    const dbName = `${selected_deployment.database_prefix}_comp_${uid}`;
     const backupName = `backup_${dbName}.sql`;
     const backupFile = path.join(backupDir, backupName);
     const wstream = fs.createWriteStream(backupFile);
@@ -264,12 +279,12 @@ async function createDatabaseBackup(prefix) {
   return [hasFailed, backupLog];
 }
 
-async function runDatabaseMigrations(prefix) {
+async function runDatabaseMigrations(selected_deployment) {
   let hasFailed = false;
   let migrationLog = '';
   console.log('[MIGRATE] Running database migrations...')
 
-  const updatesDir = path.join(process.env.PATH_TO_RCJCMS, 'updates');
+  const updatesDir = path.join(selected_deployment.path, selected_deployment.migration_folder);
 
   // Get a list of migration directories in the updates folder
   const migrationDirs = fs.readdirSync(updatesDir, { withFileTypes: true })
@@ -280,7 +295,7 @@ async function runDatabaseMigrations(prefix) {
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    database: `${prefix}_main`,
+    database: `${selected_deployment.database_prefix}_main`,
   });
 
   const connectMain = util.promisify(connectionMain.connect.bind(connectionMain));
@@ -294,8 +309,8 @@ async function runDatabaseMigrations(prefix) {
     connectionMain.end();
   });
   if (hasFailed) { return [hasFailed, migrationLog]; }
-  console.log(`[MIGRATE] Successfully connected to database ${prefix}_main`);
-  migrationLog += `\n[MIGRATE] Successfully connected to database ${prefix}_main`;
+  console.log(`[MIGRATE] Successfully connected to database ${selected_deployment.database_prefix}_main`);
+  migrationLog += `\n[MIGRATE] Successfully connected to database ${selected_deployment.database_prefix}_main`;
 
   // Read the updates table to get a list of migrations that have already been run
   const ranMigrations = await queryMain('SELECT update_name FROM updates').catch((err) => {
@@ -326,7 +341,7 @@ async function runDatabaseMigrations(prefix) {
   }
 
   // Create a full backup before proceeding with any migration
-  const [hasBackupFailed, backupLog] = await createDatabaseBackup(prefix);
+  const [hasBackupFailed, backupLog] = await createDatabaseBackup(selected_deployment);
   migrationLog += backupLog;
   if (hasBackupFailed) {
     console.error('[MIGRATE] Error creating full backup before running migrations');
@@ -374,7 +389,7 @@ async function runDatabaseMigrations(prefix) {
         // migrationLog += `\n[MIGRATE] Running migration (SQL) ${migrationDir}/${migrationFile}...`;
 
         const runSQLMigration = async (database_name) => {
-          return new Promise((resolve, reject) => {                            
+          return new Promise((resolve, reject) => {
             const migrateCmd = spawn(process.env.MYSQL_PATH, [
               '-u',
               process.env.DB_USER,
@@ -407,7 +422,7 @@ async function runDatabaseMigrations(prefix) {
             migrateCmd.stdout.on('data', (data) => {
               migrationLog += data;
             });
-    
+
             migrateCmd.stderr.on('data', (data) => {
               migrationLog += data;
             });
@@ -416,7 +431,7 @@ async function runDatabaseMigrations(prefix) {
 
         if (isMainMigration) {
           // Run the migration file on the main database
-          await runSQLMigration(`${prefix}_main`).catch((err) => {
+          await runSQLMigration(`${selected_deployment.database_prefix}_main`).catch((err) => {
             console.error('[MIGRATE] Error running main migration:', err?.message || err);
             migrationLog += '\n[MIGRATE] Error running main migration: ' + (err?.message || err);
             hasFailed = true;
@@ -430,10 +445,10 @@ async function runDatabaseMigrations(prefix) {
             connectionMain.end();
           });
           if (hasFailed) { return [hasFailed, migrationLog]; }
-          
+
           // Run the migration file on each comp database
           for (const comp of allComps) {
-            await runSQLMigration(`${prefix}_comp_${comp.uid}`).catch((err) => {
+            await runSQLMigration(`${selected_deployment.database_prefix}_comp_${comp.uid}`).catch((err) => {
               console.error('[MIGRATE] Error running comp migration:', err?.message || err);
               migrationLog += '\n[MIGRATE] Error running comp migration: ' + (err?.message || err);
               hasFailed = true;
@@ -443,11 +458,11 @@ async function runDatabaseMigrations(prefix) {
       } else if (migrationFile.endsWith(".php")) {
         // Run the PHP migration file
         const runPHPMigration = async () => {
-          return new Promise((resolve, reject) => {                            
+          return new Promise((resolve, reject) => {
             const migrateCmd = spawn(process.env.PHP_PATH, [
               migrationFilePath
             ], {
-              cwd: process.env.PATH_TO_RCJCMS
+              cwd: selected_deployment.path
             });
 
             migrateCmd.on('exit', (code) => {
@@ -471,7 +486,7 @@ async function runDatabaseMigrations(prefix) {
             migrateCmd.stdout.on('data', (data) => {
               migrationLog += data;
             });
-    
+
             migrateCmd.stderr.on('data', (data) => {
               migrationLog += data;
             });
@@ -489,12 +504,12 @@ async function runDatabaseMigrations(prefix) {
         console.log(`[MIGRATE] Migration failed for ${migrationDir}`);
         migrationLog += `\n[MIGRATE] Migration failed for ${migrationDir}`;
         connectionMain.end();
-        return [hasFailed, migrationLog]; 
+        return [hasFailed, migrationLog];
       }
     }
     // Store the migration as having been run in the main database
     const query = 'INSERT INTO updates (update_name) VALUES (?)';
-    
+
     await queryMain(query, [migrationDir]).catch((err) => {
       console.error('[MIGRATE] Error storing migration in main database:', err.message);
       migrationLog += '\n[MIGRATE] Error storing migration in main database: ' + err.message;
@@ -507,9 +522,9 @@ async function runDatabaseMigrations(prefix) {
 
   return [hasFailed, migrationLog];
 }
-  
-function enableMaintenance() {
-  const maintenanceFile = path.join(process.env.PATH_TO_RCJCMS, 'MAINTENANCE');
+
+function enableMaintenance(selected_deployment) {
+  const maintenanceFile = path.join(selected_deployment.path, 'MAINTENANCE');
   fs.writeFile(maintenanceFile, 'MAINTENANCE', (err) => {
     if (err) {
       console.error(err);
@@ -519,8 +534,8 @@ function enableMaintenance() {
   });
 }
 
-function disableMaintenance() {
-  const maintenanceFile = path.join(process.env.PATH_TO_RCJCMS, 'MAINTENANCE');
+function disableMaintenance(selected_deployment) {
+  const maintenanceFile = path.join(selected_deployment.path, 'MAINTENANCE');
   if (fs.existsSync(maintenanceFile)) {
     fs.unlink(maintenanceFile, (err) => {
       if (err) {

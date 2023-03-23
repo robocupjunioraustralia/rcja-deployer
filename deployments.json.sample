@@ -1,0 +1,18 @@
+{
+    "robocupjunioraustralia/rcj_cms/master" : {
+        "title": "RCJCMS - Production",
+        "path": "/home/apps/apache/rcja.app/rcj_cms/",
+        "migration_folder": "updates",
+        "database_prefix": "rcj_cms",
+        "repository": "robocupjunioraustralia/rcj_cms",
+        "branch_ref": "refs/heads/master"
+    },
+    "robocupjunioraustralia/rcj_cms/develop" : {
+        "title": "RCJCMS - Staging",
+        "path": "/home/apps/apache/dev.rcja.app/rcj_cms/",
+        "migration_folder": "updates",
+        "database_prefix": "rcj_cms_dev",
+        "repository": "robocupjunioraustralia/rcj_cms",
+        "branch_ref": "refs/heads/develop"
+    }
+}
