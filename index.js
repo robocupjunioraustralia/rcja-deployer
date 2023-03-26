@@ -163,7 +163,7 @@ app.post('/deploy', async (req, res) => {
   });
 });
 
-app.get("/deploy/syncDatabases", async (req, res) => {
+async function runSyncDatabases() {
   const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
   const fromDeployment = deployments_info[process.env.SYNC_FROM_DEPLOYMENT];
   const toDeployment = deployments_info[process.env.SYNC_TO_DEPLOYMENT];
@@ -201,8 +201,13 @@ app.get("/deploy/syncDatabases", async (req, res) => {
   writeLog(syncLog, true, "sync");
   res.status(200).send('OK');
   disableMaintenance(toDeployment);
-});
+};
 
 app.listen(process.env.HTTP_PORT, () => {
   console.log(`Deployer server listening on port ${process.env.HTTP_PORT}`);
 });
+
+// Schedule the runSyncDatabases function to run every night at 12am
+const CronJob = require('cron').CronJob;
+const job = new CronJob('0 0 0 * * *', runSyncDatabases);
+job.start();
