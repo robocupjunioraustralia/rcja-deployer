@@ -134,8 +134,8 @@ app.post('/deploy', async (req, res) => {
 
   enableMaintenance(selected_deployment);
   deployLog += `Deployment started on ${new Date().toISOString()}\n\n`;
-  // Execute the shell script to pull the latest changes from the master branch
-  exec(`cd ${selected_deployment.path} && git fetch && git status && git pull origin master`, async (err, stdout, stderr) => {
+  // Execute the shell script to pull the latest changes from the branch
+  exec(`cd ${selected_deployment.path} && ${selected_deployment.pull_cmd}`, async (err, stdout, stderr) => {
     if (err) {
       console.error(err);
       deployLog += `--- Error while pulling changes ---\n${err}\n${stderr}\n`;
@@ -243,5 +243,3 @@ app.listen(process.env.HTTP_PORT, () => {
 const CronJob = require('cron').CronJob;
 const job = new CronJob('0 0 0 * * *', runSyncDatabases);
 job.start();
-
-runSyncDatabases();

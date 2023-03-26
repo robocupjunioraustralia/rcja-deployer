@@ -5,7 +5,8 @@
         "migration_folder": "updates",
         "database_prefix": "rcj_cms",
         "repository": "robocupjunioraustralia/rcj_cms",
-        "branch_ref": "refs/heads/master"
+        "branch_ref": "refs/heads/master",
+        "pull_cmd": "git fetch --all && git status && git reset --hard origin/master && git pull origin master && git status"
     },
     "robocupjunioraustralia/rcj_cms/develop" : {
         "title": "RCJCMS - Staging",
@@ -13,6 +14,7 @@
         "migration_folder": "updates",
         "database_prefix": "rcj_cms_dev",
         "repository": "robocupjunioraustralia/rcj_cms",
-        "branch_ref": "refs/heads/develop"
+        "branch_ref": "refs/heads/develop",
+        "pull_cmd": "git fetch --all && git status && git reset --hard origin/develop && git pull origin develop && git status"
     }
 }
