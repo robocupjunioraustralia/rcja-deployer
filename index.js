@@ -8,7 +8,9 @@ const crypto = require('crypto');
 const fs = require('fs');
 const nodemailer = require('nodemailer');
 
+const { rebuildViews } = require('./functions/rebuildViews');
 const { syncDatabases } = require('./functions/syncDatabases');
+const { anonymiseDatabase } = require('./functions/anonymiseDatabase');
 const { createDatabaseBackup } = require('./functions/backup');
 const { runDatabaseMigrations } = require('./functions/migrate');
 const { enableMaintenance, disableMaintenance } = require('./functions/maintenance');
@@ -181,7 +183,8 @@ async function runSyncDatabases() {
 
   if (syncFailed) {
     writeLog(syncLog, false, "sync");
-    return res.status(500).send('Error syncing databases');
+    console.log("[SYNC] Sync failed");
+    return; 
   }
 
   // Because we have copied from production, some database changes might not have been applied
@@ -195,11 +198,40 @@ async function runSyncDatabases() {
   
   if (migrateFailed) {
     writeLog(syncLog, false, "sync");
-    return res.status(500).send('Error executing database migrations');
+    console.error("[SYNC] Migration failed");
+    return; 
   }
 
+  // Anonymise the database
+  console.log('[SYNC] Anonymising database...')
+  syncLog += "\n--- ANONYMISING DATABASE ---\n";
+  const [anonymiseFailed, anonymiseLog] = await anonymiseDatabase(toDeployment);
+  console.log("[SYNC] Anonymisation complete: ", anonymiseFailed ? "FAIL" : "SUCCESS");
+  syncLog += anonymiseLog;
+  syncLog += `\n\n--- ANONYMISING DATABASE: ${anonymiseFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
+  
+  if (anonymiseFailed) {
+    writeLog(syncLog, false, "sync");
+    console.error("[SYNC] Anonymisation failed");
+    return; 
+  }
+
+  // Rebuild the views
+  console.log('[SYNC] Rebuilding views...')
+  syncLog += "\n--- REBUILDING VIEWS ---\n";
+  const [rebuildFailed, rebuildLog] = await rebuildViews(toDeployment);
+  console.log("[SYNC] View rebuild complete: ", rebuildFailed ? "FAIL" : "SUCCESS");
+  syncLog += rebuildLog;
+  syncLog += `\n\n--- REBUILDING VIEWS: ${rebuildFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
+
+  if (rebuildFailed) {
+    writeLog(syncLog, false, "sync");
+    console.error("[SYNC] View rebuild failed");
+    return;
+  }
+  
   writeLog(syncLog, true, "sync");
-  res.status(200).send('OK');
+  console.log("[SYNC] Sync complete")
   disableMaintenance(toDeployment);
 };
 
@@ -211,3 +243,5 @@ app.listen(process.env.HTTP_PORT, () => {
 const CronJob = require('cron').CronJob;
 const job = new CronJob('0 0 0 * * *', runSyncDatabases);
 job.start();
+
+runSyncDatabases();

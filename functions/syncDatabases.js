@@ -107,24 +107,6 @@ async function syncDatabases(fromDeployment, toDeployment) {
             console.log(`[SYNC] Copied ${tableResult.length} tables to ${newDbName}`)
             syncLog += `\n[SYNC] Copied ${tableResult.length} tables to ${newDbName}`
             
-            // Recreate the views in the new database
-            const viewResult = await conn.query(`SELECT TABLE_NAME FROM information_schema.VIEWS WHERE TABLE_SCHEMA = '${dbName}'`);
-            
-            for (const view of [...viewResult]) {
-                // console.log(`[SYNC] Copying view to ${newDbName} (${view.TABLE_NAME})`)
-                // syncLog += `\n[SYNC] Copying view to ${newDbName} (${view.TABLE_NAME})`
-
-                const viewName = view.TABLE_NAME;
-                const viewDef = await conn.query(`SHOW CREATE VIEW ${dbName}.${viewName}`);
-                const viewDefStr = viewDef[0]['Create View'];
-                const viewDefStrNew = viewDefStr.replace(dbName, newDbName);
-                await conn.query(`DROP VIEW IF EXISTS ${newDbName}.${viewName}`);
-                await conn.query(viewDefStrNew);
-            }
-
-            console.log(`[SYNC] Copied ${viewResult.length} views to ${newDbName}`)
-            syncLog += `\n[SYNC] Copied ${viewResult.length} views to ${newDbName}`
-            
             // Create the two users for the new database
             const dropUserLpResult = await conn.query(`DROP USER IF EXISTS '${newDbLpUser}'@'localhost'`);
             if (dropUserLpResult.warningCount > 0) {
