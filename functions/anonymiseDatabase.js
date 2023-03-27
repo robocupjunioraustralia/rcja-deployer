@@ -16,6 +16,17 @@ async function anonymiseDatabase(deploymentInfo) {
         console.log("[ANONYMISE] Connected to MariaDB server");
         anonLog += "\n[ANONYMISE] Connected to MariaDB server";
 
+        // Check if rcj_cms_deployer_cache database exists
+        const cacheDbExists = await conn.query(`SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = 'rcj_cms_deployer_cache'`);
+        if (cacheDbExists.length == 0) {
+            console.log("[ANONYMISE] rcj_cms_deployer_cache database does not exist, please create it using db.sql");
+            anonLog += "\n[ANONYMISE] rcj_cms_deployer_cache database does not exist, please create it using db.sql";
+
+            conn.release()
+            await pool.end();
+            return [true, anonLog];
+        }
+
         // Retrieve the list of comp databases
         const compDatabases = await conn.query(`SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE '${deploymentInfo.database_prefix}_comp_%'`);
         
