@@ -89,7 +89,14 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
         .filter(filename => filename.endsWith('.sql') || filename.endsWith('.php'))
         .sort();
         
-        const allFiles = fs.readdirSync(migrationDirPath);
+        let allFiles = fs.readdirSync(migrationDirPath);
+
+        // if allFiles includes "SKIP_MIGRATION" then skip this migration
+        if (allFiles.includes("SKIP_MIGRATION")) {
+            console.log(`[MIGRATE] Skipping migration ${migrationDir} because SKIP_MIGRATION file was found`);
+            migrationLog += `\n[MIGRATE] Skipping migration ${migrationDir} because SKIP_MIGRATION file was found`;
+            allFiles = []; // empty the array so that the migration does not run, but still marks as fulfilled
+        }
         
         for (const migrationFile of allFiles) {
             if (hasFailed) { break; }
