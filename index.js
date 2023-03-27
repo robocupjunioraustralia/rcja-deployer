@@ -90,6 +90,10 @@ function sendEmail(subject, message, attachment) {
   });
 }
 
+app.get("/deploy/ping", (req, res) => {
+  res.send("OK");
+});
+
 // GitHub webhook endpoint after any push requests are made to robocupjunior/rcj_cms
 app.post('/deploy', async (req, res) => {
   if (!req.body) {
