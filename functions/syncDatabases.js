@@ -14,7 +14,7 @@ async function syncDatabases(fromDeployment, toDeployment) {
         stagingPrefix = toDeployment.database_prefix;
 
         // Retrieve database credentials from the connectdb.php file
-        const connectdb = fs.readFileSync(path.join(toDeployment.path, '/utils/connect_db.php'), 'utf8');
+        const connectdb = fs.readFileSync(path.join(toDeployment.path, '/utils/config.php'), 'utf8');
         const ast = phpParser.parseCode(connectdb);
 
         const db_lp_un = ast.children.find((node) => node.kind === "expressionstatement" && node.expression.left.name === "db_lp_un").expression.right.value;
