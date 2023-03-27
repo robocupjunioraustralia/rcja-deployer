@@ -4,6 +4,7 @@ This is a tool used for managing deployments of the RCJ CMS (https://github.com/
 
 ## Installation
 
+- This tool requires NodeJS, if you haven't already installed it, you can find the latest version [here](https://nodejs.org/en/download)
 1. Clone the repository: `git clone https://github.com/robocupjunioraustralia/rcj-cms-deployer.git`
 2. Install dependencies: `npm install`
 
