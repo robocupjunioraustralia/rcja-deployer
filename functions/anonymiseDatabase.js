@@ -1,4 +1,5 @@
 const mariadb = require('mariadb');
+const phppass = require("node-php-password");
 const { faker } = require('@faker-js/faker');
 
 async function anonymiseDatabase(deploymentInfo) {
@@ -131,7 +132,7 @@ async function anonymiseDatabase(deploymentInfo) {
                     first_name: faker.name.firstName(),
                     last_name: faker.name.lastName(),
                     phone_number: faker.phone.number("04########"),
-                    username: faker.internet.userName()
+                    username: faker.internet.userName(),                    
                 }
                 await conn.query(
                     'UPDATE user SET first_name = ?, last_name = ?, phone_number = ?, username = ? WHERE uid = ?',
@@ -145,6 +146,46 @@ async function anonymiseDatabase(deploymentInfo) {
             }
             console.log(`[ANONYMISE] USER: ${userRows.length} updated, ${numNewUsers} new`);
             anonLog += `\n[ANONYMISE] USER: ${userRows.length} updated, ${numNewUsers} new`;
+
+            // Anonymise user password/pin 
+            let numPassUpdated = 0;
+            let numPinUpdated = 0;
+            for (const row of userRows) {
+                let newPassHash = null;
+                if (process.env.ANON_PASSWORD) {
+                    newPassHash = await phppass.hash(process.env.ANON_PASSWORD, "PASSWORD_BCRYPT");
+                } else {
+                    newPassHash = await phppass.hash(faker.internet.password(), "PASSWORD_BCRYPT");
+                }
+
+                if (row.password_hash) {
+                    await conn.query(
+                        'UPDATE user SET password_hash = ? WHERE uid = ?',
+                        [newPassHash, row.uid]
+                    );
+                    numPassUpdated++;
+                }
+                if (row.qap) {
+                    await conn.query(
+                        'UPDATE user SET qap = ? WHERE uid = ?',
+                        [newPassHash, row.uid]
+                    );
+                    numPinUpdated++;
+                }
+            }
+            console.log(`[ANONYMISE] USER: ${numPassUpdated} passwords updated, ${numPinUpdated} pins updated`);
+
+            // Anonymise session IP address logs
+            const distinctIPs = await conn.query('SELECT DISTINCT remote_ip FROM sessions_log');
+            for (const row of distinctIPs) {
+                const newIp = faker.internet.ip();
+
+                await conn.query(
+                    'UPDATE sessions_log SET remote_ip = ? WHERE remote_ip = ?',
+                    [newIp, row.remote_ip]
+                );
+            }
+            console.log(`[ANONYMISE] SESSIONS_LOG: ${distinctIPs.length} IPs anonymised`);
 
             console.log(`[ANONYMISE] Anonymization of ${dbName} complete`);
             anonLog += `\n[ANONYMISE] Anonymization of ${dbName} complete`;
