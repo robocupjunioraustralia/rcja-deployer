@@ -5,10 +5,23 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 
 const { createDatabaseBackup } = require('./backup');
+const { runComposer } = require('./runComposer');
 
 async function runDatabaseMigrations(selected_deployment, skipBackup) {
     let hasFailed = false;
     let migrationLog = '';
+    console.log('[MIGRATE] Ensuring composer dependencies are up to date...');
+    migrationLog += '\n[MIGRATE] Ensuring composer dependencies are up to date...';
+
+    const [hasComposerFailed, composerLog] = await runComposer(selected_deployment);
+    migrationLog += composerLog;
+    if (hasComposerFailed) {
+        console.error('[MIGRATE] Error running composer install');
+        migrationLog += '\n[MIGRATE] Error running composer install';
+        hasFailed = true;
+    }
+    if (hasFailed) { return [hasFailed, migrationLog]; }
+
     console.log('[MIGRATE] Running database migrations...')
     
     const updatesDir = path.join(selected_deployment.path, selected_deployment.migration_folder);
