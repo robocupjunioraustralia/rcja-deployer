@@ -21,7 +21,7 @@ The following variables must be set for the deployment scripts to work.
 | DB_HOST<br>DB_USER<br>DB_PASSWORD | Details for the MariaDB server with a working instance of the RCJCMS |
 | DB_CACHE_NAME | Required for the anonymise function.<br>The name of the MySQL database to use for caching names |
 | | |
-| PHP_PATH<br>MYSQL_PATH<br>MYSQLDUMP_PATH | The paths to your php, mysql, and mysqldump executables.<br>There are some suggestions in the sample file for windows/linux |
+| PHP_PATH<br>MYSQL_PATH<br>MYSQLDUMP_PATH<br>COMPOSER_PATH | The paths to your php, mysql, mysqldump, and composer executables.<br>There are some suggestions in the sample file for windows/linux |
 
 Some other variables of note include the following, these are only required if you want to run the full server (`npm start`)
 | Variable | Description |
