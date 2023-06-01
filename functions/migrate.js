@@ -186,18 +186,13 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
                         hasFailed = true;
                     });
                 } else if (isCompMigration) {
-                    // Read the comps table to get a list of all comps
-                    const allComps = await queryMain('SELECT uid FROM comps').catch((err) => {
-                        console.error('[MIGRATE] Error reading comps table:', err.message);
-                        migrationLog += '\n[MIGRATE] Error reading comps table: ' + err.message;
-                        hasFailed = true;
-                        connectionMain.end();
-                    });
-                    if (hasFailed) { return [hasFailed, migrationLog]; }
-                    
-                    // Run the migration file on each comp database
-                    for (const comp of allComps) {
-                        await runSQLMigration(`${selected_deployment.database_prefix}_comp_${comp.uid}`).catch((err) => {
+                    // Retrieve the list of comp databases
+                    const compDatabases = await queryMain(`SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE '${selected_deployment.database_prefix}_comp_%'`);
+
+                    for (const compDb of compDatabases) {
+                        const dbName = compDb.SCHEMA_NAME;
+
+                        await runSQLMigration(dbName).catch((err) => {
                             console.error('[MIGRATE] Error running comp migration:', err?.message || err);
                             migrationLog += '\n[MIGRATE] Error running comp migration: ' + (err?.message || err);
                             hasFailed = true;
