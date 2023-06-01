@@ -29,7 +29,14 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
     // Get a list of migration directories in the updates folder
     const migrationDirs = fs.readdirSync(updatesDir, { withFileTypes: true })
     .filter(dirent => dirent.isDirectory())
+    .map(dirent => ({
+        name: dirent.name,
+        createdAt: fs.statSync(path.join(updatesDir, dirent.name)).birthtimeMs
+    }))
+    .sort((a, b) => a.createdAt - b.createdAt)
     .map(dirent => dirent.name);
+
+    console.log('[MIGRATE] Found migrations: \n - ' + migrationDirs.join('\n - '));
     
     const connectionMain = mysql.createConnection({
         host: process.env.DB_HOST,
