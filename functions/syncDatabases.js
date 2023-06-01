@@ -45,12 +45,26 @@ async function syncDatabases(fromDeployment, toDeployment) {
 
         // Loop through each of the databases
         for (const row of result) {
+            console.log("\n");
+            syncLog += "\n";
+
             const dbName = row.SCHEMA_NAME;
             
             // Determine whether it's a main database or a comp database
             const isMain = dbName == productionPrefix + '_main';
             const isComp = dbName.startsWith(productionPrefix + '_comp_');
+
+            // To ensure a full sync, we must delete all of the staging databases. 
+            // This is usually done when matching to the prod database, but if no matching prod DB exists, the staging DB to delete will never be found.
+            const isTargetComp = dbName.startsWith(stagingPrefix + '_comp_');
+            if (isTargetComp) { 
+                const dropResult = await conn.query(`DROP DATABASE IF EXISTS ${dbName}`);
+                const dropRemainingResult = await conn.query('SHOW DATABASES LIKE "' + dbName + '"');
+                console.log(`[SYNC] Dropped old database (init) ${dbName}: ${dropResult.warningStatus} warnings, ${dropResult.affectedRows} rows affected, ${dropRemainingResult.length} remaining`)
+                syncLog += `\n[SYNC] Dropped old database (init) ${dbName}: ${dropResult.warningStatus} warnings, ${dropResult.affectedRows} rows affected, ${dropRemainingResult.length} remaining`
+            }
             
+            // The rest of the script should only be run on main and comp databases from the prod set
             if (!isMain && !isComp) { continue; }         
 
             // These values are for "main" databases, comp databases will overwrite them
@@ -60,15 +74,24 @@ async function syncDatabases(fromDeployment, toDeployment) {
             let newDbHpUser = db_hp_un.replace(productionPrefix, stagingPrefix);
             let newDbHpPass = db_hp_pw;
 
-            console.log(`[SYNC] Syncing ${isMain ? 'main' : 'comp'} database ${dbName} to ${newDbName}`)
-            syncLog += `\n[SYNC] Syncing ${isMain ? 'main' : 'comp'} database ${dbName} to ${newDbName}`
+            console.log(`[SYNC] STARTING SYNC: ${isMain ? 'main' : 'comp'} database ${dbName} to ${newDbName}`)
+            syncLog += `\n[SYNC] STARTING SYNC: ${isMain ? 'main' : 'comp'} database ${dbName} to ${newDbName}`
             
+            const dropResult = await conn.query(`DROP DATABASE IF EXISTS ${newDbName}`);
+            const dropRemainingResult = await conn.query('SHOW DATABASES LIKE "' + newDbName + '"');
+            console.log(`[SYNC] Dropped old database ${newDbName}: ${dropResult.warningStatus} warnings, ${dropResult.affectedRows} rows affected, ${dropRemainingResult.length} remaining`)
+            syncLog += `\n[SYNC] Dropped old database ${newDbName}: ${dropResult.warningStatus} warnings, ${dropResult.affectedRows} rows affected, ${dropRemainingResult.length} remaining`
+
             if (isComp) {
                 const compId = dbName.replace(productionPrefix + '_comp_', '');
                 await conn.query(`USE ${productionPrefix}_main;`)
                 const compResult = await conn.query(`SELECT * FROM ${productionPrefix}_main.comps WHERE uid = ?`, [compId]);
                 
-                if (compResult.length == 0) { continue; }
+                if (compResult.length == 0) { 
+                    console.log(`[SYNC] Comp database ${dbName} has no entry in the origin comps table`)
+                    syncLog += `\n[SYNC] Comp database ${dbName} has no entry in the origin comps table`
+                    continue; 
+                }
                 
                 newDbLpUser = stagingPrefix + '_' + compId + '_lp';
                 newDbLpPass = compResult[0].db_lp_pwd;
@@ -79,12 +102,6 @@ async function syncDatabases(fromDeployment, toDeployment) {
                 syncLog += `\n[SYNC] Comp database ${dbName} has LP user ${newDbLpUser} and HP user ${newDbHpUser}`
             }
             
-            const dropResult = await conn.query(`DROP DATABASE IF EXISTS ${newDbName}`);
-            if (dropResult.warningCount > 0) {
-                console.log(`[SYNC] Dropped old database ${newDbName}`)
-                syncLog += `\n[SYNC] Dropped old database ${newDbName}`
-            }
-
             await conn.query(`CREATE DATABASE ${newDbName}`);
             await conn.query(`USE ${newDbName}`);
 
