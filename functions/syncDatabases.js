@@ -3,6 +3,12 @@ const fs = require('fs');
 const path = require('path');
 const phpParser = require('php-parser');
 
+const { rebuildViews } = require('./rebuildViews');
+const { anonymiseDatabase } = require('./anonymiseDatabase');
+const { runDatabaseMigrations } = require('./migrate');
+const { enableMaintenance, disableMaintenance } = require('./maintenance');
+const { writeLog } = require('./logging');
+
 // This function syncronises the databases between the production and staging servers
 // All of the databases on the production server will be copied to the staging server
 // The staging server will have the same databases, but with a different prefix
@@ -147,6 +153,73 @@ async function syncDatabases(fromDeployment, toDeployment) {
     return [syncFailed, syncLog]
 }
 
+async function runSyncDatabases(fromDeployment, toDeployment) {  
+    console.log(`[SYNC] Syncing ${fromDeployment.title} to ${toDeployment.title}...`);
+    let syncLog = `--- Syncing ${fromDeployment.title} to ${toDeployment.title} ---\n`;
+  
+    enableMaintenance(toDeployment);
+    syncLog += `\n[SYNC] Started on ${new Date().toISOString()}\n\n`;
+    
+    const [syncFailed, newSyncLog] = await syncDatabases(fromDeployment, toDeployment);
+    syncLog += newSyncLog;
+    syncLog += `\n[SYNC] Finished on ${new Date().toISOString()}\n\n`
+    syncLog += `\n\n--- SYNC: ${syncFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
+  
+    if (syncFailed) {
+      writeLog(syncLog, false, "sync");
+      console.log("[SYNC] Sync failed");
+      return; 
+    }
+  
+    // Because we have copied from production, some database changes might not have been applied
+    // We need to run the migrations again to ensure that the database is up to date
+    console.log('[SYNC] Running database migrations...')
+    syncLog += "\n--- RUNNING DATABASE MIGRATIONS ---\n";
+    const [migrateFailed, migrateLog] = await runDatabaseMigrations(toDeployment, true);
+    console.log("[SYNC] Migration complete: ", migrateFailed ? "FAIL" : "SUCCESS");
+    syncLog += migrateLog;
+    syncLog += `\n\n--- DATABASE MIGRATIONS: ${migrateFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
+    
+    if (migrateFailed) {
+      writeLog(syncLog, false, "sync");
+      console.error("[SYNC] Migration failed");
+      return; 
+    }
+  
+    // Anonymise the database
+    console.log('[SYNC] Anonymising database...')
+    syncLog += "\n--- ANONYMISING DATABASE ---\n";
+    const [anonymiseFailed, anonymiseLog] = await anonymiseDatabase(toDeployment);
+    console.log("[SYNC] Anonymisation complete: ", anonymiseFailed ? "FAIL" : "SUCCESS");
+    syncLog += anonymiseLog;
+    syncLog += `\n\n--- ANONYMISING DATABASE: ${anonymiseFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
+    
+    if (anonymiseFailed) {
+      writeLog(syncLog, false, "sync");
+      console.error("[SYNC] Anonymisation failed");
+      return; 
+    }
+  
+    // Rebuild the views
+    console.log('[SYNC] Rebuilding views...')
+    syncLog += "\n--- REBUILDING VIEWS ---\n";
+    const [rebuildFailed, rebuildLog] = await rebuildViews(toDeployment);
+    console.log("[SYNC] View rebuild complete: ", rebuildFailed ? "FAIL" : "SUCCESS");
+    syncLog += rebuildLog;
+    syncLog += `\n\n--- REBUILDING VIEWS: ${rebuildFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
+  
+    if (rebuildFailed) {
+      writeLog(syncLog, false, "sync");
+      console.error("[SYNC] View rebuild failed");
+      return;
+    }
+    
+    writeLog(syncLog, true, "sync");
+    console.log("[SYNC] Sync complete")
+    disableMaintenance(toDeployment);
+}
+
 module.exports = {
-    syncDatabases
+    syncDatabases,
+    runSyncDatabases
 };

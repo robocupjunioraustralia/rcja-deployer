@@ -1,25 +1,22 @@
 const { exec } = require('child_process');
 const express = require("express");
-const bodyParser = require("body-parser");
 const morgan = require("morgan");
 const dotenv = require("dotenv");
 const path = require("path");
 const crypto = require('crypto');
 const fs = require('fs');
-const nodemailer = require('nodemailer');
 
-const { rebuildViews } = require('./functions/rebuildViews');
-const { syncDatabases } = require('./functions/syncDatabases');
-const { anonymiseDatabase } = require('./functions/anonymiseDatabase');
-const { createDatabaseBackup } = require('./functions/backup');
+const { runSyncDatabases } = require('./functions/syncDatabases');
 const { runDatabaseMigrations } = require('./functions/migrate');
 const { enableMaintenance, disableMaintenance } = require('./functions/maintenance');
+const { writeLog } = require('./functions/logging');
 
 dotenv.config();
 
 const app = express();
 app.set('case sensitive routing', false);
-app.use(bodyParser.json());
+app.use(express.json({limit: '50mb'}));
+app.use(express.urlencoded({limit: '50mb', extended: true, parameterLimit: 50000}));
 app.use(express.static(path.join(__dirname, 'public')));
 
 morgan.token('statusColor', (req, res, args) => {
@@ -37,58 +34,6 @@ morgan.token('statusColor', (req, res, args) => {
   return '\x1b[' + color + 'm' + status + '\x1b[0m';
 });
 app.use(morgan(':statusColor :method :url - :response-time ms - :remote-addr :remote-user'));
-
-function writeLog(message, success, type) {
-  const logDir = path.join(__dirname, 'logs');
-  if (!fs.existsSync(logDir)) {
-    fs.mkdirSync(logDir);
-  }
-  const logName = `${type}_${new Date().toISOString().replace(/:/g, '-')}_${success ? 'success' : 'fail'}.log`;
-  const logFile = path.join(logDir, logName);
-  fs.writeFile(logFile, message, (err) => {
-    if (err) {
-      console.error(err);
-    } else {
-      if (type == 'deploy') {
-        console.log(`${success ? 'Deployment successful' : 'Error while deploying'}. See logs/${logName} for details.`);
-      } else if (type == 'sync') {
-        console.log(`${success ? 'Sync successful' : 'Error while syncing'}. See logs/${logName} for details.`);
-      }
-    }
-  });
-  if (type == 'deploy') {
-    sendEmail(success ? 'Deployment successful' : 'DEPLOYMENT FAILED', message, logFile);
-  } else if (type == 'sync') {
-    sendEmail(success ? 'Sync successful' : 'SYNC FAILED', message, logFile);
-  }
-}
-
-function sendEmail(subject, message, attachment) {
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: process.env.SMTP_PORT,
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASSWORD
-    }
-  });
-  const mailOptions = {
-    from: process.env.SMTP_FROM,
-    to: process.env.SMTP_TO,
-    subject: subject,
-    text: message,
-    attachments: attachment ? [{ filename: path.basename(attachment), path: attachment }] : [],
-    priority: "high"
-  };
-  transporter.sendMail(mailOptions, (err, info) => {
-    if (err) {
-      console.error(err);
-    } else {
-      console.log(`[DEPLOYER] Email sent: ${info.response}`);
-    }
-  });
-}
 
 app.get("/deploy/ping", (req, res) => {
   res.send("OK");
@@ -169,81 +114,18 @@ app.post('/deploy', async (req, res) => {
   });
 });
 
-async function runSyncDatabases() {
-  const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-  const fromDeployment = deployments_info[process.env.SYNC_FROM_DEPLOYMENT];
-  const toDeployment = deployments_info[process.env.SYNC_TO_DEPLOYMENT];
-
-  console.log(`[SYNC] Syncing ${fromDeployment.title} to ${toDeployment.title}...`);
-  let syncLog = `--- Syncing ${fromDeployment.title} to ${toDeployment.title} ---\n`;
-
-  enableMaintenance(toDeployment);
-  syncLog += `\n[SYNC] Started on ${new Date().toISOString()}\n\n`;
-  
-  const [syncFailed, newSyncLog] = await syncDatabases(fromDeployment, toDeployment);
-  syncLog += newSyncLog;
-  syncLog += `\n[SYNC] Finished on ${new Date().toISOString()}\n\n`
-  syncLog += `\n\n--- SYNC: ${syncFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
-
-  if (syncFailed) {
-    writeLog(syncLog, false, "sync");
-    console.log("[SYNC] Sync failed");
-    return; 
-  }
-
-  // Because we have copied from production, some database changes might not have been applied
-  // We need to run the migrations again to ensure that the database is up to date
-  console.log('[SYNC] Running database migrations...')
-  syncLog += "\n--- RUNNING DATABASE MIGRATIONS ---\n";
-  const [migrateFailed, migrateLog] = await runDatabaseMigrations(toDeployment, true);
-  console.log("[SYNC] Migration complete: ", migrateFailed ? "FAIL" : "SUCCESS");
-  syncLog += migrateLog;
-  syncLog += `\n\n--- DATABASE MIGRATIONS: ${migrateFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
-  
-  if (migrateFailed) {
-    writeLog(syncLog, false, "sync");
-    console.error("[SYNC] Migration failed");
-    return; 
-  }
-
-  // Anonymise the database
-  console.log('[SYNC] Anonymising database...')
-  syncLog += "\n--- ANONYMISING DATABASE ---\n";
-  const [anonymiseFailed, anonymiseLog] = await anonymiseDatabase(toDeployment);
-  console.log("[SYNC] Anonymisation complete: ", anonymiseFailed ? "FAIL" : "SUCCESS");
-  syncLog += anonymiseLog;
-  syncLog += `\n\n--- ANONYMISING DATABASE: ${anonymiseFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
-  
-  if (anonymiseFailed) {
-    writeLog(syncLog, false, "sync");
-    console.error("[SYNC] Anonymisation failed");
-    return; 
-  }
-
-  // Rebuild the views
-  console.log('[SYNC] Rebuilding views...')
-  syncLog += "\n--- REBUILDING VIEWS ---\n";
-  const [rebuildFailed, rebuildLog] = await rebuildViews(toDeployment);
-  console.log("[SYNC] View rebuild complete: ", rebuildFailed ? "FAIL" : "SUCCESS");
-  syncLog += rebuildLog;
-  syncLog += `\n\n--- REBUILDING VIEWS: ${rebuildFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
-
-  if (rebuildFailed) {
-    writeLog(syncLog, false, "sync");
-    console.error("[SYNC] View rebuild failed");
-    return;
-  }
-  
-  writeLog(syncLog, true, "sync");
-  console.log("[SYNC] Sync complete")
-  disableMaintenance(toDeployment);
-};
-
 app.listen(process.env.HTTP_PORT, () => {
   console.log(`Deployer server listening on port ${process.env.HTTP_PORT}`);
 });
 
-// Schedule the runSyncDatabases function to run every night at 12am
+function triggerSyncDatabases() {
+  const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
+  const fromDeployment = deployments_info[process.env.SYNC_FROM_DEPLOYMENT];
+  const toDeployment = deployments_info[process.env.SYNC_TO_DEPLOYMENT];
+  runSyncDatabases(fromDeployment, toDeployment);
+}
+
+// Schedule the triggerSyncDatabases function to run every night at 12am
 const CronJob = require('cron').CronJob;
-const job = new CronJob('0 0 0 * * *', runSyncDatabases);
+const job = new CronJob('0 0 0 * * *', triggerSyncDatabases);
 job.start();

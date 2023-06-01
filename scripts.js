@@ -11,7 +11,7 @@ const fs = require('fs');
 const nodemailer = require('nodemailer');
 
 const { rebuildViews } = require('./functions/rebuildViews');
-const { syncDatabases } = require('./functions/syncDatabases');
+const { runSyncDatabases } = require('./functions/syncDatabases');
 const { anonymiseDatabase } = require('./functions/anonymiseDatabase');
 const { createDatabaseBackup } = require('./functions/backup');
 const { runDatabaseMigrations } = require('./functions/migrate');
@@ -97,10 +97,22 @@ function triggerAnonymise() {
     anonymiseDatabase(selected_deployment);
 }
 
+// npm run syncDatabases (deployment)
+//   Syncronises the production database to the development database
+//   uses env.SYNC_FROM_DEPLOYMENT and env.SYNC_TO_DEPLOYMENT to determine which deployments to sync
+function triggerSyncDatabases() {
+    const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
+    const fromDeployment = deployments_info[process.env.SYNC_FROM_DEPLOYMENT];
+    const toDeployment = deployments_info[process.env.SYNC_TO_DEPLOYMENT];
+    console.log(`Syncronising deployments...`)
+    runSyncDatabases(fromDeployment, toDeployment);
+}
+
 module.exports = {
     migrate: triggerMigrate,
     rebuildViews: triggerRebuildViews,
-    anonymise: triggerAnonymise
+    anonymise: triggerAnonymise,
+    syncDatabases: triggerSyncDatabases
 };
 
 require('make-runnable/custom')({

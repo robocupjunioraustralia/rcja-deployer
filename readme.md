@@ -93,9 +93,18 @@ Rebuilds all views in the database.
 ```
 npm run rebuildViews 
 ```
+
 #### Anonymise Database
 
 Anonymises the database.
 ```
 npm run anonymise
+```
+
+#### Run database sync
+
+Syncronises the production database to the development database
+- uses `env.SYNC_FROM_DEPLOYMENT` and `env.SYNC_TO_DEPLOYMENT` to determine which deployments to sync
+```
+npm run syncDatabases
 ```
