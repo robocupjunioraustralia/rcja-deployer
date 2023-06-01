@@ -26,7 +26,7 @@ dotenv.config();
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
 function triggerMigrate() {
     const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-    const selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
+    let selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
 
     // if deployment is not specified, set selected deployment to first deployment in deployments.json
     if (process.argv[process.argv.indexOf('migrate') + 1] !== undefined) {
@@ -52,7 +52,7 @@ function triggerMigrate() {
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
 function triggerRebuildViews() {
     const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-    const selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
+    let selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
 
     // if deployment is not specified, set selected deployment to first deployment in deployments.json
     if (process.argv[process.argv.indexOf('rebuildViews') + 1] !== undefined) {
@@ -78,7 +78,7 @@ function triggerRebuildViews() {
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
 function triggerAnonymise() {
     const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-    const selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
+    let selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
 
     // if deployment is not specified, set selected deployment to first deployment in deployments.json
     if (process.argv[process.argv.indexOf('anonymise') + 1] !== undefined) {
