@@ -107,6 +107,20 @@ app.post('/deploy', async (req, res) => {
       writeLog(deployLog, false, "deploy");
       return res.status(500).send('Error executing database migrations');
     }
+  
+    // Rebuild the views
+    console.log('[SYNC] Rebuilding views...')
+    deployLog += "\n--- REBUILDING VIEWS ---\n";
+    const [rebuildFailed, rebuildLog] = await rebuildViews(toDeployment);
+    console.log("[SYNC] View rebuild complete: ", rebuildFailed ? "FAIL" : "SUCCESS");
+    deployLog += rebuildLog;
+    deployLog += `\n\n--- REBUILDING VIEWS: ${rebuildFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
+  
+    if (rebuildFailed) {
+      writeLog(deployLog, false, "sync");
+      console.error("[SYNC] View rebuild failed");
+      return res.status(500).send('Error rebuilding views');
+    }
 
     writeLog(deployLog, true, "deploy");
     res.status(200).send('OK');
