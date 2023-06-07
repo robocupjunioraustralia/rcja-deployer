@@ -42,6 +42,9 @@ async function syncDatabases(fromDeployment, toDeployment) {
         const result = await conn.query('SELECT SCHEMA_NAME FROM information_schema.SCHEMATA');
         console.log("[SYNC] Found " + result.length + " databases on the server")
         syncLog += "\n[SYNC] Found " + result.length + " databases on the server"
+        
+        // Keep track of the databases that have been updated, so we don't delete them accidentally
+        const updatedNewDBs = [];
 
         // Loop through each of the databases
         for (const row of result) {
@@ -57,7 +60,7 @@ async function syncDatabases(fromDeployment, toDeployment) {
             // To ensure a full sync, we must delete all of the staging databases. 
             // This is usually done when matching to the prod database, but if no matching prod DB exists, the staging DB to delete will never be found.
             const isTargetComp = dbName.startsWith(stagingPrefix + '_comp_');
-            if (isTargetComp) { 
+            if (isTargetComp && !updatedNewDBs.includes(dbName)) {
                 const dropResult = await conn.query(`DROP DATABASE IF EXISTS ${dbName}`);
                 const dropRemainingResult = await conn.query('SHOW DATABASES LIKE "' + dbName + '"');
                 console.log(`[SYNC] Dropped old database (init) ${dbName}: ${dropResult.warningStatus} warnings, ${dropResult.affectedRows} rows affected, ${dropRemainingResult.length} remaining`)
@@ -152,6 +155,8 @@ async function syncDatabases(fromDeployment, toDeployment) {
 
             console.log(`[SYNC] Finished syncing ${isMain ? 'main' : 'comp'} database ${dbName} to ${newDbName}`)
             syncLog += `\n[SYNC] Finished syncing ${isMain ? 'main' : 'comp'} database ${dbName} to ${newDbName}`
+
+            updatedNewDBs.push(newDbName);
         }
         
         console.log("[SYNC] Finished syncing databases")

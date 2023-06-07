@@ -10,6 +10,7 @@ const { runSyncDatabases } = require('./functions/syncDatabases');
 const { runDatabaseMigrations } = require('./functions/migrate');
 const { enableMaintenance, disableMaintenance } = require('./functions/maintenance');
 const { writeLog } = require('./functions/logging');
+const { rebuildViews } = require('./functions/rebuildViews');
 
 dotenv.config();
 
@@ -111,7 +112,7 @@ app.post('/deploy', async (req, res) => {
     // Rebuild the views
     console.log('[SYNC] Rebuilding views...')
     deployLog += "\n--- REBUILDING VIEWS ---\n";
-    const [rebuildFailed, rebuildLog] = await rebuildViews(toDeployment);
+    const [rebuildFailed, rebuildLog] = await rebuildViews(selected_deployment);
     console.log("[SYNC] View rebuild complete: ", rebuildFailed ? "FAIL" : "SUCCESS");
     deployLog += rebuildLog;
     deployLog += `\n\n--- REBUILDING VIEWS: ${rebuildFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
