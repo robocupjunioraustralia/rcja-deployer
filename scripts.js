@@ -42,7 +42,7 @@ function triggerMigrate() {
     }
     
     console.log(`Running migrations on ${selected_deployment.title}...`)
-    runDatabaseMigrations(selected_deployment, false);
+    runDatabaseMigrations(selected_deployment, !selected_deployment.backup); 
 }
 
 // npm run rebuildViews (deployment)

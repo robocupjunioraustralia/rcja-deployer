@@ -6,6 +6,7 @@
         "database_prefix": "rcj_cms",
         "repository": "robocupjunioraustralia/rcj_cms",
         "branch_ref": "refs/heads/master",
+        "backup": true,
         "pull_cmd": "git fetch --all && git status && git reset --hard origin/master && git pull origin master && git status"
     },
     "robocupjunioraustralia/rcj_cms/develop" : {
@@ -15,6 +16,7 @@
         "database_prefix": "rcj_cms_dev",
         "repository": "robocupjunioraustralia/rcj_cms",
         "branch_ref": "refs/heads/develop",
+        "backup": false,
         "pull_cmd": "git fetch --all && git status && git reset --hard origin/develop && git pull origin develop && git status"
     }
 }
