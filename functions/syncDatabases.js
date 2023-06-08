@@ -65,6 +65,9 @@ async function syncDatabases(fromDeployment, toDeployment) {
                 const dropRemainingResult = await conn.query('SHOW DATABASES LIKE "' + dbName + '"');
                 console.log(`[SYNC] Dropped old database (init) ${dbName}: ${dropResult.warningStatus} warnings, ${dropResult.affectedRows} rows affected, ${dropRemainingResult.length} remaining`)
                 syncLog += `\n[SYNC] Dropped old database (init) ${dbName}: ${dropResult.warningStatus} warnings, ${dropResult.affectedRows} rows affected, ${dropRemainingResult.length} remaining`
+            } else if (isTargetComp) {
+                console.log(`[SYNC] Skipping drop old database ${dbName} as it has already been updated`)
+                syncLog += `\n[SYNC] Skipping drop old database ${dbName} as it has already been updated`
             }
             
             // The rest of the script should only be run on main and comp databases from the prod set

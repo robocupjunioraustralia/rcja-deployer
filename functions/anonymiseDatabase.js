@@ -115,7 +115,7 @@ async function anonymiseDatabase(deploymentInfo) {
             const userRows = await conn.query('SELECT * FROM user');
             let numNewUsers = 0;
             for (const row of userRows) {
-                if (row.username == "rcjadm") {
+                if (row.username == "rcjsupport") {
                     continue;
                 }
                 const cachedUser = userCache.find(cacheRow => cacheRow.uid_user == row.uid && cacheRow.uid_comp == compId);
