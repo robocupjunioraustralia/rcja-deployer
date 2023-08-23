@@ -176,10 +176,12 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
                         });
                         
                         migrateCmd.stdout.on('data', (data) => {
+                            console.log(data.toString());
                             migrationLog += data;
                         });
                         
                         migrateCmd.stderr.on('data', (data) => {
+                            console.log(data.toString());
                             migrationLog += data;
                         });
                     });
@@ -235,10 +237,12 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
                         });
                         
                         migrateCmd.stdout.on('data', (data) => {
+                            console.log(data.toString());
                             migrationLog += data;
                         });
                         
                         migrateCmd.stderr.on('data', (data) => {
+                            console.log(data.toString());
                             migrationLog += data;
                         });
                     });

@@ -59,6 +59,7 @@ async function createDatabaseBackup(selected_deployment) {
             });
             
             mysqldump.stderr.on('data', (data) => {
+                console.log(data.toString());
                 backupLog += data;
             });
         });

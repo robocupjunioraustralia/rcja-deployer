@@ -41,10 +41,12 @@ async function rebuildViews(deploymentInfo) {
                 });
                 
                 viewCmd.stdout.on('data', (data) => {
+                    console.log(data.toString());
                     rebuildViewsLog += data;
                 });
                 
                 viewCmd.stderr.on('data', (data) => {
+                    console.log(data.toString());
                     rebuildViewsLog += data;
                 });
             });
