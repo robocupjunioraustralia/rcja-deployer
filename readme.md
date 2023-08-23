@@ -96,6 +96,13 @@ Rebuilds all views in the database.
 npm run rebuildViews 
 ```
 
+#### Rebuild Users
+
+Rebuilds all users in the database.
+```
+npm run rebuildViews 
+```
+
 #### Anonymise Database
 
 Anonymises the database.
