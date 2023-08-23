@@ -4,6 +4,7 @@ const path = require('path');
 const phpParser = require('php-parser');
 
 const { rebuildViews } = require('./rebuildViews');
+const { recreateUsers } = require('./recreateUsers');
 const { anonymiseDatabase } = require('./anonymiseDatabase');
 const { runDatabaseMigrations } = require('./migrate');
 const { enableMaintenance, disableMaintenance } = require('./maintenance');
@@ -18,15 +19,6 @@ async function syncDatabases(fromDeployment, toDeployment) {
     try {
         productionPrefix = fromDeployment.database_prefix;
         stagingPrefix = toDeployment.database_prefix;
-
-        // Retrieve database credentials from the connectdb.php file
-        const connectdb = fs.readFileSync(path.join(toDeployment.path, '/utils/config.php'), 'utf8');
-        const ast = phpParser.parseCode(connectdb);
-
-        const db_lp_un = ast.children.find((node) => node.kind === "expressionstatement" && node.expression.left.name === "db_lp_un").expression.right.value;
-        const db_lp_pw = ast.children.find((node) => node.kind === "expressionstatement" && node.expression.left.name === "db_lp_pw").expression.right.value;
-        const db_hp_un = ast.children.find((node) => node.kind === "expressionstatement" && node.expression.left.name === "db_hp_un").expression.right.value;
-        const db_hp_pw = ast.children.find((node) => node.kind === "expressionstatement" && node.expression.left.name === "db_hp_pw").expression.right.value;
 
         // Connect to the MariaDB server using the login details
         const pool = mariadb.createPool({
@@ -43,50 +35,44 @@ async function syncDatabases(fromDeployment, toDeployment) {
         console.log("[SYNC] Found " + result.length + " databases on the server")
         syncLog += "\n[SYNC] Found " + result.length + " databases on the server"
         
-        // Keep track of the databases that have been updated, so we don't delete them accidentally
-        const updatedNewDBs = [];
+        // To ensure a full sync, we must delete all of the staging databases.
+        // The main db must be deleted last, as it has foreign key links with the comp dbs
+        for (const row of result) {
+            const dbName = row.SCHEMA_NAME;
+            const isComp = dbName.startsWith(stagingPrefix + '_comp_');
+            if (isComp) {
+                // await conn.query("SET FOREIGN_KEY_CHECKS = 0");
+                const dropResult = await conn.query(`DROP DATABASE IF EXISTS ${dbName}`);
+                const dropRemainingResult = await conn.query('SHOW DATABASES LIKE "' + dbName + '"');
+                // await conn.query("SET FOREIGN_KEY_CHECKS = 1");
+                console.log(`[SYNC] Dropped old database (init) ${dbName}: ${dropResult.warningStatus} warnings, ${dropResult.affectedRows} rows affected, ${dropRemainingResult.length} remaining`)
+                syncLog += `\n[SYNC] Dropped old database (init) ${dbName}: ${dropResult.warningStatus} warnings, ${dropResult.affectedRows} rows affected, ${dropRemainingResult.length} remaining`
+            }
+        }
+
+        // await conn.query("SET FOREIGN_KEY_CHECKS = 0");
+        const dropMainResult = await conn.query(`DROP DATABASE IF EXISTS ${stagingPrefix}_main`);
+        const dropMainRemainingResult = await conn.query('SHOW DATABASES LIKE "' + stagingPrefix + '_main"');
+        // await conn.query("SET FOREIGN_KEY_CHECKS = 1");
+        console.log(`[SYNC] Dropped old database (init) ${stagingPrefix}_main: ${dropMainResult.warningStatus} warnings, ${dropMainResult.affectedRows} rows affected, ${dropMainRemainingResult.length} remaining`)
+        syncLog += `\n[SYNC] Dropped old database (init) ${stagingPrefix}_main: ${dropMainResult.warningStatus} warnings, ${dropMainResult.affectedRows} rows affected, ${dropMainRemainingResult.length} remaining`
 
         // Loop through each of the databases
         for (const row of result) {
-            console.log("\n");
-            syncLog += "\n";
-
             const dbName = row.SCHEMA_NAME;
             
             // Determine whether it's a main database or a comp database
             const isMain = dbName == productionPrefix + '_main';
             const isComp = dbName.startsWith(productionPrefix + '_comp_');
 
-            // To ensure a full sync, we must delete all of the staging databases. 
-            // This is usually done when matching to the prod database, but if no matching prod DB exists, the staging DB to delete will never be found.
-            const isTargetComp = dbName.startsWith(stagingPrefix + '_comp_');
-            if (isTargetComp && !updatedNewDBs.includes(dbName)) {
-                const dropResult = await conn.query(`DROP DATABASE IF EXISTS ${dbName}`);
-                const dropRemainingResult = await conn.query('SHOW DATABASES LIKE "' + dbName + '"');
-                console.log(`[SYNC] Dropped old database (init) ${dbName}: ${dropResult.warningStatus} warnings, ${dropResult.affectedRows} rows affected, ${dropRemainingResult.length} remaining`)
-                syncLog += `\n[SYNC] Dropped old database (init) ${dbName}: ${dropResult.warningStatus} warnings, ${dropResult.affectedRows} rows affected, ${dropRemainingResult.length} remaining`
-            } else if (isTargetComp) {
-                console.log(`[SYNC] Skipping drop old database ${dbName} as it has already been updated`)
-                syncLog += `\n[SYNC] Skipping drop old database ${dbName} as it has already been updated`
-            }
-            
             // The rest of the script should only be run on main and comp databases from the prod set
             if (!isMain && !isComp) { continue; }         
 
             // These values are for "main" databases, comp databases will overwrite them
             let newDbName = dbName.replace(productionPrefix, stagingPrefix);
-            let newDbLpUser = db_lp_un.replace(productionPrefix, stagingPrefix);
-            let newDbLpPass = db_lp_pw;
-            let newDbHpUser = db_hp_un.replace(productionPrefix, stagingPrefix);
-            let newDbHpPass = db_hp_pw;
 
-            console.log(`[SYNC] STARTING SYNC: ${isMain ? 'main' : 'comp'} database ${dbName} to ${newDbName}`)
-            syncLog += `\n[SYNC] STARTING SYNC: ${isMain ? 'main' : 'comp'} database ${dbName} to ${newDbName}`
-            
-            const dropResult = await conn.query(`DROP DATABASE IF EXISTS ${newDbName}`);
-            const dropRemainingResult = await conn.query('SHOW DATABASES LIKE "' + newDbName + '"');
-            console.log(`[SYNC] Dropped old database ${newDbName}: ${dropResult.warningStatus} warnings, ${dropResult.affectedRows} rows affected, ${dropRemainingResult.length} remaining`)
-            syncLog += `\n[SYNC] Dropped old database ${newDbName}: ${dropResult.warningStatus} warnings, ${dropResult.affectedRows} rows affected, ${dropRemainingResult.length} remaining`
+            console.log(`\n[SYNC] Found ${dbName}`)
+            syncLog += `\n\n[SYNC] Found ${dbName}`
 
             if (isComp) {
                 const compId = dbName.replace(productionPrefix + '_comp_', '');
@@ -94,25 +80,20 @@ async function syncDatabases(fromDeployment, toDeployment) {
                 const compResult = await conn.query(`SELECT * FROM ${productionPrefix}_main.comps WHERE uid = ?`, [compId]);
                 
                 if (compResult.length == 0) { 
-                    console.log(`[SYNC] Comp database ${dbName} has no entry in the origin comps table`)
-                    syncLog += `\n[SYNC] Comp database ${dbName} has no entry in the origin comps table`
+                    console.log(`[SYNC] WARNING: Comp database ${dbName} has no entry in the origin comps table`)
+                    syncLog += `\n[SYNC] WARNING: Comp database ${dbName} has no entry in the origin comps table`
                     continue; 
                 }
                 
-                newDbLpUser = stagingPrefix + '_' + compId + '_lp';
-                newDbLpPass = compResult[0].db_lp_pwd;
-                newDbHpUser = stagingPrefix + '_' + compId + '_hp';
-                newDbHpPass = compResult[0].db_hp_pwd;
-
-                console.log(`[SYNC] Comp database ${dbName} has LP user ${newDbLpUser} and HP user ${newDbHpUser}`)
-                syncLog += `\n[SYNC] Comp database ${dbName} has LP user ${newDbLpUser} and HP user ${newDbHpUser}`
+                await conn.query(`DROP USER IF EXISTS '${stagingPrefix + '_' + compId + '_lp'}'@'localhost'`);
+                await conn.query(`DROP USER IF EXISTS '${stagingPrefix + '_' + compId + '_hp'}'@'localhost'`);
             }
             
             await conn.query(`CREATE DATABASE ${newDbName}`);
             await conn.query(`USE ${newDbName}`);
 
-            console.log(`[SYNC] Created new database ${newDbName} and switched to it`)
-            syncLog += `\n[SYNC] Created new database ${newDbName} and switched to it`
+            console.log(`[SYNC] Created new database ${newDbName}`)
+            syncLog += `\n[SYNC] Created new database ${newDbName}`
             
             // Retrieve the list of tables in the main database
             const tableResult = await conn.query(`SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = '${dbName}'`);
@@ -133,33 +114,8 @@ async function syncDatabases(fromDeployment, toDeployment) {
                 await conn.query(`INSERT INTO ${tableName} SELECT * FROM ${dbName}.${tableName}`);
             }
 
-            console.log(`[SYNC] Copied ${tableResult.length} tables to ${newDbName}`)
-            syncLog += `\n[SYNC] Copied ${tableResult.length} tables to ${newDbName}`
-            
-            // Create the two users for the new database
-            const dropUserLpResult = await conn.query(`DROP USER IF EXISTS '${newDbLpUser}'@'localhost'`);
-            if (dropUserLpResult.warningCount > 0) {
-                console.log(`[SYNC] Dropped old LP user ${newDbLpUser}`)
-                syncLog += `\n[SYNC] Dropped old LP user ${newDbLpUser}`
-            }
-            const dropUserHpResult = await conn.query(`DROP USER IF EXISTS '${newDbHpUser}'@'localhost'`);
-            if (dropUserHpResult.warningCount > 0) {
-                console.log(`[SYNC] Dropped old HP user ${newDbHpUser}`)
-                syncLog += `\n[SYNC] Dropped old HP user ${newDbHpUser}`
-            }
-
-            await conn.query(`CREATE USER '${newDbLpUser}'@'localhost' IDENTIFIED BY '${newDbLpPass}'`);
-            await conn.query(`CREATE USER '${newDbHpUser}'@'localhost' IDENTIFIED BY '${newDbHpPass}'`);
-            await conn.query(`GRANT SELECT ON \`${newDbName}\`.* TO '${newDbLpUser}'@'localhost'`);
-            await conn.query(`GRANT SELECT, INSERT, UPDATE, DELETE, DROP, CREATE VIEW ON \`${newDbName}\`.* TO '${newDbHpUser}'@'localhost'`);
-
-            console.log(`[SYNC] Created LP user ${newDbLpUser} and HP user ${newDbHpUser}`)
-            syncLog += `\n[SYNC] Created LP user ${newDbLpUser} and HP user ${newDbHpUser}`
-
-            console.log(`[SYNC] Finished syncing ${isMain ? 'main' : 'comp'} database ${dbName} to ${newDbName}`)
-            syncLog += `\n[SYNC] Finished syncing ${isMain ? 'main' : 'comp'} database ${dbName} to ${newDbName}`
-
-            updatedNewDBs.push(newDbName);
+            console.log(`[SYNC] Finished syncing ${tableResult.length} tables to ${isMain ? 'MAIN' : 'COMP'} database ${newDbName}`)
+            syncLog += `\n[SYNC] Finished syncing ${tableResult.length} tables to ${isMain ? 'MAIN' : 'COMP'} database ${newDbName}`
         }
         
         console.log("[SYNC] Finished syncing databases")
@@ -180,14 +136,13 @@ async function syncDatabases(fromDeployment, toDeployment) {
 
 async function runSyncDatabases(fromDeployment, toDeployment) {  
     console.log(`[SYNC] Syncing ${fromDeployment.title} to ${toDeployment.title}...`);
-    let syncLog = `--- Syncing ${fromDeployment.title} to ${toDeployment.title} ---\n`;
+    let syncLog = `--- SYNCING ${fromDeployment.title} TO ${toDeployment.title} ---\n`;
   
     enableMaintenance(toDeployment);
     syncLog += `\n[SYNC] Started on ${new Date().toISOString()}\n\n`;
     
     const [syncFailed, newSyncLog] = await syncDatabases(fromDeployment, toDeployment);
     syncLog += newSyncLog;
-    syncLog += `\n[SYNC] Finished on ${new Date().toISOString()}\n\n`
     syncLog += `\n\n--- SYNC: ${syncFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
   
     if (syncFailed) {
@@ -195,7 +150,19 @@ async function runSyncDatabases(fromDeployment, toDeployment) {
       console.log("[SYNC] Sync failed");
       return; 
     }
+
+    console.log('[SYNC] Recreating database users...')
+    syncLog += "\n--- RECREATING DATABASE UESRS ---\n";
+    const [recreateUsersFailed, recreateUsersLog] = await recreateUsers(toDeployment);
+    syncLog += recreateUsersLog;
+    syncLog += `\n\n--- RECREATE UESRS: ${recreateUsersFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
   
+    if (recreateUsersFailed) {
+      writeLog(syncLog, false, "sync");
+      console.error("[SYNC] Recreate Users Failed");
+      return; 
+    }
+
     // Because we have copied from production, some database changes might not have been applied
     // We need to run the migrations again to ensure that the database is up to date
     console.log('[SYNC] Running database migrations...')
@@ -239,6 +206,7 @@ async function runSyncDatabases(fromDeployment, toDeployment) {
       return;
     }
     
+    syncLog += `\n[SYNC] Finished on ${new Date().toISOString()}\n\n`
     writeLog(syncLog, true, "sync");
     console.log("[SYNC] Sync complete")
     disableMaintenance(toDeployment);
