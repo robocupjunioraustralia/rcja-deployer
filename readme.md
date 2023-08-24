@@ -101,7 +101,7 @@ npm run rebuildViews
 
 Rebuilds all users in the database.
 ```
-npm run rebuildViews 
+npm run recreateViews 
 ```
 
 #### Anonymise Database
