@@ -4,7 +4,8 @@ const path = require('path');
 const phpParser = require('php-parser');
 
 const { rebuildViews } = require('./rebuildViews');
-const { recreateUsers } = require('./recreateUsers');
+const { rebuildUsers } = require('./rebuildUsers');
+const { rebuildForeignKeys } = require('./rebuildForeignKeys');
 const { anonymiseDatabase } = require('./anonymiseDatabase');
 const { runDatabaseMigrations } = require('./migrate');
 const { enableMaintenance, disableMaintenance } = require('./maintenance');
@@ -153,13 +154,13 @@ async function runSyncDatabases(fromDeployment, toDeployment) {
 
     console.log('[SYNC] Recreating database users...')
     syncLog += "\n--- RECREATING DATABASE UESRS ---\n";
-    const [recreateUsersFailed, recreateUsersLog] = await recreateUsers(toDeployment);
-    syncLog += recreateUsersLog;
-    syncLog += `\n\n--- RECREATE UESRS: ${recreateUsersFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
+    const [rebuildUsersFailed, rebuildUsersLog] = await rebuildUsers(toDeployment);
+    syncLog += rebuildUsersLog;
+    syncLog += `\n\n--- REBUILD UESRS: ${rebuildUsersFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
   
-    if (recreateUsersFailed) {
+    if (rebuildUsersFailed) {
       writeLog(syncLog, false, "sync");
-      console.error("[SYNC] Recreate Users Failed");
+      console.error("[SYNC] Rebuild Users Failed");
       return; 
     }
 
@@ -178,6 +179,18 @@ async function runSyncDatabases(fromDeployment, toDeployment) {
       return; 
     }
   
+    console.log('[SYNC] Rebuilding foreign keys...')
+    syncLog += "\n--- REBUILDING FOREIGN KEYS ---\n";
+    const [rebuildFKeysFailed, rebuildFKeysLog] = await rebuildForeignKeys(toDeployment);
+    syncLog += rebuildFKeysLog;
+    syncLog += `\n\n--- REBUILDING FOREIGN KEYS: ${rebuildFKeysFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
+  
+    if (rebuildFKeysFailed) {
+      writeLog(syncLog, false, "sync");
+      console.error("[SYNC] Rebuild Foreign Keys failed");
+      return; 
+    }
+
     // Anonymise the database
     console.log('[SYNC] Anonymising database...')
     syncLog += "\n--- ANONYMISING DATABASE ---\n";

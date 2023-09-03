@@ -3,9 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const phpParser = require('php-parser');
 
-async function recreateUsers(deploymentInfo) {
-    let recreateUsersFailed = false;
-    let recreateUsersLog = "";
+async function rebuildUsers(deploymentInfo) {
+    let rebuildUsersFailed = false;
+    let rebuildUsersLog = "";
     
     try {
         // Retrieve database credentials from the deployment config
@@ -15,8 +15,8 @@ async function recreateUsers(deploymentInfo) {
         const db_lp_pw = ast.children.find((node) => node.kind === "expressionstatement" && node.expression.left.name === "db_lp_pw").expression.right.value;
         const db_hp_pw = ast.children.find((node) => node.kind === "expressionstatement" && node.expression.left.name === "db_hp_pw").expression.right.value;
 
-        console.log("[RECREATEUSERS] Retrieved credentials from config.php");
-        recreateUsersLog += "\n[RECREATEUSERS] Retrieved credentials from config.php";
+        console.log("[REBUILDUSERS] Retrieved credentials from config.php");
+        rebuildUsersLog += "\n[REBUILDUSERS] Retrieved credentials from config.php";
 
         // Connect to the MariaDB server
         const pool = mariadb.createPool({
@@ -25,8 +25,8 @@ async function recreateUsers(deploymentInfo) {
             password: process.env.DB_PASSWORD
         });
         const conn = await pool.getConnection();
-        console.log("[RECREATEUSERS] Connected to MariaDB server");
-        recreateUsersLog += "\n[RECREATEUSERS] Connected to MariaDB server";
+        console.log("[REBUILDUSERS] Connected to MariaDB server");
+        rebuildUsersLog += "\n[REBUILDUSERS] Connected to MariaDB server";
 
         await conn.query(`USE ${deploymentInfo.database_prefix}_main`);
 
@@ -39,8 +39,8 @@ async function recreateUsers(deploymentInfo) {
         await conn.query(`GRANT SELECT ON ${deploymentInfo.database_prefix}_main.* TO '${deploymentInfo.database_prefix}_lp'@'localhost'`);
         await conn.query(`GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, FILE, INDEX, ALTER, CREATE TEMPORARY TABLES, CREATE VIEW, EVENT, TRIGGER, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, EXECUTE ON *.* TO '${deploymentInfo.database_prefix}_hp'@'localhost'`);
         
-        console.log(`[RECREATEUSERS] Recreated users: ${deploymentInfo.database_prefix}_lp and ${deploymentInfo.database_prefix}_hp`);
-        recreateUsersLog += `\n[RECREATEUSERS] Recreated users: ${deploymentInfo.database_prefix}_lp and ${deploymentInfo.database_prefix}_hp`;
+        console.log(`[REBUILDUSERS] Rebuild users: ${deploymentInfo.database_prefix}_lp and ${deploymentInfo.database_prefix}_hp`);
+        rebuildUsersLog += `\n[REBUILDUSERS] Rebuild users: ${deploymentInfo.database_prefix}_lp and ${deploymentInfo.database_prefix}_hp`;
         
         const allComps = await conn.query("SELECT uid, db_lp_pwd, db_hp_pwd FROM comps");
 
@@ -78,22 +78,22 @@ async function recreateUsers(deploymentInfo) {
             await conn.query(`GRANT SELECT ON ${deploymentInfo.database_prefix}_main.line_tile_tag TO '${un_hp}'@'localhost'`);
             await conn.query(`GRANT SELECT ON ${deploymentInfo.database_prefix}_main.line_tile_tag_links TO '${un_hp}'@'localhost'`);
 
-            console.log(`[RECREATEUSERS] Recreated users: ${un_lp} and ${un_hp}`);
-            recreateUsersLog += `\n[RECREATEUSERS] Recreated users: ${un_lp} and ${un_hp}`;
+            console.log(`[REBUILDUSERS] Rebuild users: ${un_lp} and ${un_hp}`);
+            rebuildUsersLog += `\n[REBUILDUSERS] Rebuild users: ${un_lp} and ${un_hp}`;
         }
         
         conn.release();
         await pool.end();
     } catch (err) {
         console.error(err);
-        recreateUsersFailed = true;
-        recreateUsersLog += "\n[RECREATEUSERS] Failed to rebuild views"
-        recreateUsersLog += "\n[RECREATEUSERS] Error: " + err
+        rebuildUsersFailed = true;
+        rebuildUsersLog += "\n[REBUILDUSERS] Failed to rebuild views"
+        rebuildUsersLog += "\n[REBUILDUSERS] Error: " + err
     }
 
-    return [recreateUsersFailed, recreateUsersLog]
+    return [rebuildUsersFailed, rebuildUsersLog]
 }
 
 module.exports = {
-    recreateUsers
+    rebuildUsers
 }

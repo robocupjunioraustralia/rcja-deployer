@@ -1,5 +1,5 @@
 {
-    "robocupjunioraustralia/rcj_cms/master" : {
+    "master" : {
         "title": "RCJCMS - Production",
         "path": "/home/apps/apache/rcja.app/rcj_cms/",
         "migration_folder": "updates",
@@ -9,7 +9,7 @@
         "backup": true,
         "pull_cmd": "git fetch --all && git status && git reset --hard origin/master && git pull origin master && git status"
     },
-    "robocupjunioraustralia/rcj_cms/develop" : {
+    "develop" : {
         "title": "RCJCMS - Staging",
         "path": "/home/apps/apache/dev.rcja.app/rcj_cms/",
         "migration_folder": "updates",

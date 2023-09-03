@@ -96,11 +96,18 @@ Rebuilds all views in the database.
 npm run rebuildViews 
 ```
 
+#### Rebuild Foreign Keys
+
+Rebuilds all foreign keys in the database.
+```
+npm run rebuildForeignKeys 
+```
+
 #### Rebuild Users
 
 Rebuilds all users in the database.
 ```
-npm run rebuildViews 
+npm run rebuildUsers 
 ```
 
 #### Anonymise Database

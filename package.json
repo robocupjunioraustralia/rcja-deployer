@@ -7,9 +7,10 @@
     "start": "node index.js",
     "migrate": "node scripts.js migrate",
     "rebuildViews": "node scripts.js rebuildViews",
+    "rebuildUsers" : "node scripts.js rebuildUsers",
+    "rebuildForeignKeys" : "node scripts.js rebuildForeignKeys",
     "anonymise": "node scripts.js anonymise",
-    "syncDatabases" : "node scripts.js syncDatabases",
-    "recreateUsers" : "node scripts.js recreateUsers"
+    "syncDatabases" : "node scripts.js syncDatabases"
   },
   "author": "",
   "license": "ISC",
