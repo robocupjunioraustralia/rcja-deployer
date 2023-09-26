@@ -47,8 +47,9 @@ The sample included is meant for a full deployment, for a development instance o
         "database_prefix": "rcj_cms",
         "repository": "robocupjunioraustralia/rcj_cms",
         "pull_cmd": "git fetch --all && git pull git status",
+        "build_cmd": "build",
         "backup": true,
-        "branch_ref": "refs/heads/develop"
+        "branch_ref": "refs/heads/develop",
     }
 }
 ```
@@ -62,6 +63,7 @@ Here's a quick explanation of each variable:
 | *database_prefix | The prefix of the MySQL databases used by the deployment |
 | *repository | The GitHub repository containing the deployment files |
 | *pull_cmd | The command to use to pull latest changes from the repository |
+| *build_cmd | The npm script to build assets, "build" (dev) or "publish" (prod) |
 | backup | Whether or not to backup the database before running migrations |
 | branch_ref | The git ref for confirming the branch sent from the the webhook |
 

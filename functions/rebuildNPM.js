@@ -1,7 +1,9 @@
 const path = require("path");
 const { spawn } = require('child_process');
 
-async function rebuildNPM(selected_deployment, buildCmd = 'build') {
+async function rebuildNPM(selected_deployment, buildCmd) {
+    if (!buildCmd) { buildCmd = selected_deployment.build_cmd; }
+
     let hasFailed = false;
     let npmLog = '\n\n[NPM] Running npm commands...';
     console.log('[NPM] Running npm commands...');

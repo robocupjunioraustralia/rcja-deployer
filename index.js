@@ -11,6 +11,7 @@ const { runDatabaseMigrations } = require('./functions/migrate');
 const { enableMaintenance, disableMaintenance } = require('./functions/maintenance');
 const { writeLog } = require('./functions/logging');
 const { rebuildViews } = require('./functions/rebuildViews');
+const { rebuildNPM } = require('./functions/rebuildNPM');
 
 dotenv.config();
 
@@ -95,6 +96,15 @@ app.post('/deploy', async (req, res) => {
     console.log('[DEPLOY] Successfully pulled all changes')
     console.log(stdout, stderr);
     deployLog += `--- Successfully pulled all changes ---\n${stdout}\n${stderr}\n`;
+
+
+    // Update NPM packages and rebuild assets
+    console.log('[DEPLOY] Updating NPM packages and rebuilding assets...')
+    deployLog += "\n--- RUNNING NPM COMMANDS ---\n";
+    const [npmFailed, npmLog] = await rebuildNPM(selected_deployment);
+    console.log("[DEPLOY] NPM commands complete: ", npmFailed ? "FAIL" : "SUCCESS");
+    deployLog += npmLog;
+    deployLog += `\n\n--- NPM COMMANDS: ${npmFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
 
     // Check for any database migrations
     console.log('[DEPLOY] Running database migrations...')
