@@ -10,7 +10,10 @@
     "rebuildUsers" : "node scripts.js rebuildUsers",
     "rebuildForeignKeys" : "node scripts.js rebuildForeignKeys",
     "anonymise": "node scripts.js anonymise",
-    "syncDatabases" : "node scripts.js syncDatabases"
+    "syncDatabases" : "node scripts.js syncDatabases",
+    "build" : "node scripts.js build",
+    "watch" : "node scripts.js watch",
+    "publish" : "node scripts.js publish"
   },
   "author": "",
   "license": "ISC",

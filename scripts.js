@@ -18,6 +18,7 @@ const { createDatabaseBackup } = require('./functions/backup');
 const { runDatabaseMigrations } = require('./functions/migrate');
 const { rebuildUsers } = require('./functions/rebuildUsers');
 const { enableMaintenance, disableMaintenance } = require('./functions/maintenance');
+const { rebuildNPM } = require('./functions/rebuildNPM');
 
 dotenv.config();
 
@@ -165,13 +166,48 @@ async function triggerRebuildForeignKeys() {
     await rebuildForeignKeys(selected_deployment);
 }
 
+// npm run build (deployment)
+// npm run watch (deployment)
+// npm run publish (deployment)
+//   Triggers npm install, npm prune, then npm run build/watch/publish
+//
+//   params:
+//   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
+async function triggerNPM() {
+    let selected_cmd = 'build';
+    if (process.argv.includes('watch')) { selected_cmd = 'watch'; }
+    if (process.argv.includes('publish')) { selected_cmd = 'publish'; }
+
+    const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
+    let selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
+
+    // if deployment is not specified, set selected deployment to first deployment in deployments.json
+    if (process.argv[process.argv.indexOf(selected_cmd) + 1] !== undefined) {
+        const deployment = process.argv[process.argv.indexOf(selected_cmd) + 1];
+        const deployment_info = deployments_info[deployment];
+        
+        if (deployment_info) {
+            selected_deployment = deployment_info;
+        } else {
+            console.error(`Deployment ${deployment} not found in deployments.json`);
+            return;
+        }
+    }
+
+    console.log(`Installing NPM dependancies and running ${selected_cmd} script for ${selected_deployment.title}...`)
+    await rebuildNPM(selected_deployment, selected_cmd);
+}
+
 module.exports = {
     migrate: triggerMigrate,
     rebuildViews: triggerRebuildViews,
     anonymise: triggerAnonymise,
     syncDatabases: triggerSyncDatabases,
     rebuildUsers: triggerRebuildUsers,
-    rebuildForeignKeys: triggerRebuildForeignKeys
+    rebuildForeignKeys: triggerRebuildForeignKeys,
+    build: triggerNPM,
+    watch: triggerNPM,
+    publish: triggerNPM,
 };
 
 require('make-runnable/custom')({

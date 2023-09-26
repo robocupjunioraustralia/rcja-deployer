@@ -83,6 +83,18 @@ For instance, if you have recieved new changes from develop, it is a good idea t
 
 - Append a deployment key to the end of any of these (`npm run migrate [deployment]`) to change the deployment the command will use. Otherwise, it will just choose the first one alphabetically.
 
+
+#### Install NPM Dependencies and build assets
+
+Installs all NPM dependencies and runs webpack to assets
+There are 3 modes for this that you can choose from:
+- `npm run build` - Builds the frontend for development
+- `npm run watch` - Builds the frontend for development and watches for changes
+- `npm run publish` - Builds the frontend for production
+
+When developing and making changes, you will probably want to use `npm run watch` \
+If you are encountering weird CSS/JS problems, try running `npm run build` to see if that fixes it. 
+
 #### Migrate Database
 
 Runs any new migration scripts in the updates folder.
