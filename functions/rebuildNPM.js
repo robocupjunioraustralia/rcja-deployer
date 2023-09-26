@@ -1,5 +1,6 @@
 const path = require("path");
 const { spawn } = require('child_process');
+const chalk = require('chalk');
 
 async function rebuildNPM(selected_deployment, buildCmd) {
     if (!buildCmd) { buildCmd = selected_deployment.build_cmd; }
@@ -73,6 +74,10 @@ async function rebuildNPM(selected_deployment, buildCmd) {
     if (!hasFailed) {
         console.log(`[NPM] Running npm run ${buildCmd}...`);
         npmLog += `\n[NPM] Running npm run ${buildCmd}...`;
+
+        if (buildCmd === "watch") {
+            console.log(chalk.blue("[DEPLOYER] Running NPM in watch mode. This will not exit until you press Ctrl+C."));
+        }
 
         await spawnNpm('npm', ['run', buildCmd]).catch((err) => {
             console.error('[NPM] npm run ' + buildCmd + ' failed');
