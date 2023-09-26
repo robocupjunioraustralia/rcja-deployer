@@ -50,7 +50,7 @@ async function rebuildNPM(selected_deployment, buildCmd) {
     console.log("[NPM] Installing npm packages...");
     npmLog += "\n[NPM] Installing npm packages...";
 
-    await spawnNpm('npm', ['install']).catch((err) => {
+    await spawnNpm(process.env.NPM_PATH, ['install']).catch((err) => {
         console.error('[NPM] npm install failed');
         npmLog += '\n[NPM] npm install failed';
         console.error(err);
@@ -62,7 +62,7 @@ async function rebuildNPM(selected_deployment, buildCmd) {
         console.log("[NPM] Pruning old npm packages...");
         npmLog += "\n[NPM] Pruning old npm packages...";
 
-        await spawnNpm('npm', ['prune', '--no-audit']).catch((err) => {
+        await spawnNpm(process.env.NPM_PATH, ['prune', '--no-audit']).catch((err) => {
             console.error('[NPM] npm prune failed');
             npmLog += '\n[NPM] npm prune failed';
             console.error(err);
@@ -79,7 +79,7 @@ async function rebuildNPM(selected_deployment, buildCmd) {
             console.log(chalk.blue("[DEPLOYER] Running NPM in watch mode. This will not exit until you press Ctrl+C."));
         }
 
-        await spawnNpm('npm', ['run', buildCmd]).catch((err) => {
+        await spawnNpm(process.env.NPM_PATH, ['run', buildCmd]).catch((err) => {
             console.error('[NPM] npm run ' + buildCmd + ' failed');
             npmLog += '\n[NPM] npm run ' + buildCmd + ' failed';
             console.error(err);
