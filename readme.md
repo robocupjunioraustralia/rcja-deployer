@@ -49,6 +49,7 @@ The sample included is meant for a full deployment, for a development instance o
         "pull_cmd": "git fetch --all && git pull git status",
         "build_cmd": "build",
         "backup": true,
+        "run_nightly": true,
         "branch_ref": "refs/heads/develop",
     }
 }
@@ -65,6 +66,7 @@ Here's a quick explanation of each variable:
 | *pull_cmd | The command to use to pull latest changes from the repository |
 | *build_cmd | The npm script to build assets, "build" (dev) or "publish" (prod) |
 | backup | Whether or not to backup the database before running migrations |
+| run_nightly | Whether or not to run the nightly script on this deployment |
 | branch_ref | The git ref for confirming the branch sent from the the webhook |
 
 

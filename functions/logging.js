@@ -17,6 +17,8 @@ function writeLog(message, success, type) {
                 console.log(`${success ? 'Deployment successful' : 'Error while deploying'}. See logs/${logName} for details.`);
             } else if (type == 'sync') {
                 console.log(`${success ? 'Sync successful' : 'Error while syncing'}. See logs/${logName} for details.`);
+            } else if (type == 'nightly') {
+                console.log(`${success ? 'Nightly script successful' : 'Error while running nightly script'}. See logs/${logName} for details.`);
             }
         }
     });
@@ -24,6 +26,8 @@ function writeLog(message, success, type) {
         sendEmail(success ? 'Deployment successful' : 'DEPLOYMENT FAILED', message, logFile);
     } else if (type == 'sync') {
         sendEmail(success ? 'Sync successful' : 'SYNC FAILED', message, logFile);
+    } else if (type == 'nightly') {
+        sendEmail(success ? 'Nightly script successful' : 'NIGHTLY SCRIPT FAILED', message, logFile);
     }
 }
 

@@ -7,6 +7,7 @@
         "repository": "robocupjunioraustralia/rcj_cms",
         "branch_ref": "refs/heads/master",
         "backup": true,
+        "run_nightly": true,
         "pull_cmd": "git fetch --all && git status && git reset --hard origin/master && git pull origin master && git status",
         "build_cmd": "publish"
     },
@@ -18,6 +19,7 @@
         "repository": "robocupjunioraustralia/rcj_cms",
         "branch_ref": "refs/heads/develop",
         "backup": false,
+        "run_nightly": true,
         "pull_cmd": "git fetch --all && git status && git reset --hard origin/develop && git pull origin develop && git status",
         "build_cmd": "build"
     }

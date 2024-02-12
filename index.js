@@ -5,6 +5,8 @@ const dotenv = require("dotenv");
 const path = require("path");
 const crypto = require('crypto');
 const fs = require('fs');
+const { spawn } = require('child_process');
+const CronJob = require('cron').CronJob;
 
 const { runSyncDatabases } = require('./functions/syncDatabases');
 const { runDatabaseMigrations } = require('./functions/migrate');
@@ -150,7 +152,86 @@ function triggerSyncDatabases() {
   runSyncDatabases(fromDeployment, toDeployment);
 }
 
-// Schedule the triggerSyncDatabases function to run every night at 12am
-const CronJob = require('cron').CronJob;
-const job = new CronJob('0 0 0 * * *', triggerSyncDatabases);
-job.start();
+async function runPHPScript(filePath, cwd) {
+  return new Promise((resolve, reject) => {
+    const migrateCmd = spawn(process.env.PHP_PATH, [filePath], { cwd: cwd });
+
+    let scriptLog = "";
+    migrateCmd.on('exit', (code) => {
+      if (code === 0) {
+        return resolve(scriptLog);
+      }
+      reject(`PHP script exited with code ${code?.message || code}:\n${scriptLog}`)
+    });
+    
+    migrateCmd.on('error', (err) => {
+      reject(`PHP script errored:\n${err?.message || err}\n${scriptLog}`);
+    });
+    
+    migrateCmd.stdout.on('data', (data) => {
+      console.log(data.toString());
+      scriptLog += data;
+    });
+    
+    migrateCmd.stderr.on('data', (data) => {
+      console.log(data.toString());
+      scriptLog += data;
+    });
+  });
+}
+
+async function triggerCMSNightly() {
+  const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
+  const deployments = Object.values(deployments_info);
+  
+  const nightlyStart = new Date();
+  let nightlyLog = `--- Running nightly scripts on ${deployments.length} deployments ---\n`;
+  nightlyLog += `[NIGHTLY] Started on ${nightlyStart.toISOString()}\n`;
+
+  for (const deployment of deployments) {
+    nightlyLog += `--- Deployment: ${deployment.title} ---\n`;
+
+    if (!deployment.run_nightly) {
+      nightlyLog += `[NIGHTLY] Skipping Deployment - Not enabled.\n\n`;
+      continue;
+    }
+
+    // Find and run the nightly script, if present, under path/utils/nightly.php
+    const nightlyScript = path.join(deployment.path, 'utils/nightly.php');
+    if (fs.existsSync(nightlyScript)) {
+      console.log('[NIGHTLY] Running script...');
+      nightlyLog += `[NIGHTLY] Running script...\n`;
+
+      try {
+        const scriptOutput = await runPHPScript(nightlyScript, deployment.path)
+        nightlyLog += scriptOutput;
+      } catch (err) {
+        console.error('[NIGHTLY] Error running script:', err?.message || err);
+        nightlyLog += `[NIGHTLY] Error running script: ${err?.message || err}\n`;
+
+        writeLog(nightlyLog, false, "nightly");
+        return;  
+      }
+      
+      console.log('[NIGHTLY] Script complete.');
+      nightlyLog += `[NIGHTLY] Script complete.\n\n`;
+    } else {
+      nightlyLog += `[NIGHTLY] Skipping Deployment - No script found.\n\n`;
+    }
+  }
+
+  console.log(`[NIGHTLY] Nightly scripts complete. Took ${(new Date() - nightlyStart) / 1000} seconds.`);
+  nightlyLog += `[NIGHTLY] Nightly scripts complete. Took ${(new Date() - nightlyStart) / 1000} seconds.\n`;
+  writeLog(nightlyLog, true, "nightly");
+}
+
+// Schedule jobs:
+// - triggerCMSNightly - every night at 12am
+// - triggerSyncDatabases - every night at 2am
+const syncJob = new CronJob('0 0 2 * * *', triggerSyncDatabases);
+const nightlyJob = new CronJob('0 0 0 * * *', triggerCMSNightly);
+syncJob.start();
+nightlyJob.start();
+
+// Run the nightly script on startup
+triggerCMSNightly();
