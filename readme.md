@@ -31,6 +31,9 @@ Some other variables of note include the following, these are only required if y
 | SMTP_* | Email configuration details for deployment alerts |
 | SYNC_FROM_DEPLOYMENT<br>SYNC_TO_DEPLOYMENT | The deployment to sync from and to.<br>This is used by the full server to sync the staging server with production each night |
 | ANON_PASSWORD | The (unhashed) password that will be set for every user after anonymisation. This may be useful for testing. It isn't required. |
+| REGO_DEPLOY_SCRIPT | Path to the rego deploy script, e.g. /home/apps/rcja-registration/deploy.sh |
+| REGO_DEPLOY_SECRET | Secret used for authenticating requests from rego GitHub |
+
 
 ### deployments.json
 
