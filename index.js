@@ -1,5 +1,6 @@
 const { exec } = require('child_process');
 const express = require("express");
+const bodyParser = require("body-parser");
 const morgan = require("morgan");
 const dotenv = require("dotenv");
 const path = require("path");
@@ -19,6 +20,7 @@ dotenv.config();
 
 const app = express();
 app.set('case sensitive routing', false);
+app.use(bodyParser.json());
 app.use(express.json({limit: '50mb'}));
 app.use(express.urlencoded({limit: '50mb', extended: true, parameterLimit: 50000}));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -41,6 +43,62 @@ app.use(morgan(':statusColor :method :url - :response-time ms - :req[x-Forwarded
 
 app.get("/deploy/ping", (req, res) => {
   res.send("OK");
+});
+
+// GitHub actions endpoint for deployments of robocupjunior/RCJA_Registration_System
+app.post('/deploy/rego', async (req, res) => {
+  console.log(req.body);
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.split(" ")[1] !== process.env.REGO_DEPLOY_SECRET) {
+    return res.status(401).send('Unauthorized');
+  }
+
+  if (!req.body.image || !/^[a-f0-9]{40}$/i.test(req.body.image)) {
+    return res.status(400).send('Invalid or missing DEPLOY_SHA');
+  }
+
+  console.log(`[REGO] Received deployment request for ${req.body.image}...`)
+
+  res.setHeader('Content-Type', 'text/plain');
+
+  // Run process.env.REGO_DEPLOY_SCRIPT with a param of the sha. Pipe the output to the response.
+  try {
+    const deployCmd = spawn("sudo", [process.env.REGO_DEPLOY_SCRIPT, req.body.image], {
+      shell: true,
+      cwd: process.env.REGO_DEPLOY_PATH
+    });
+    
+    deployCmd.stdout.on('data', (data) => {
+      console.log("[REGO] " + data.toString())
+      res.write(data);
+    });
+  
+    deployCmd.stderr.on('data', (data) => {
+      console.log("[REGO] " + data.toString())
+      res.write(data);
+    });
+  
+    deployCmd.on('close', (code) => {
+      console.log(`[REGO] Process exited with code ${code}`);
+      
+      if (code !== 0) {
+        res.write(`Process exited with code ${code}`);
+        res.status(500).end();
+        return;
+      } else {
+        // Expects last line of script to be "Deployment complete." if successful
+        res.write('Deployment complete.');
+        res.end();
+      }
+    });
+  } catch (err) {
+    console.error("[REGO] Error running deployment script:",
+      err?.
+      message || err
+    );
+    res.write(`Error running deployment script: ${err?.message || err}`);
+    res.status(500).end();
+  }
 });
 
 // GitHub webhook endpoint after any push requests are made to robocupjunior/rcj_cms
