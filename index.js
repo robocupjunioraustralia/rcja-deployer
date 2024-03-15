@@ -1,3 +1,5 @@
+const Sentry = require("@sentry/node");
+const { nodeProfilingIntegration } = require("@sentry/profiling-node");
 const { exec } = require('child_process');
 const express = require("express");
 const bodyParser = require("body-parser");
@@ -19,7 +21,25 @@ const { rebuildNPM } = require('./functions/rebuildNPM');
 dotenv.config();
 
 const app = express();
+app.set('trust proxy', true);
 app.set('case sensitive routing', false);
+
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    integrations: [
+      new Sentry.Integrations.Http({ tracing: true }),
+      new Sentry.Integrations.Express({ app }),
+      nodeProfilingIntegration(),
+    ],
+    tracesSampleRate: 1.0,
+    profilesSampleRate: 1.0,
+  });
+  
+  app.use(Sentry.Handlers.requestHandler());
+  app.use(Sentry.Handlers.tracingHandler());
+}
+
 app.use(bodyParser.json());
 app.use(express.json({limit: '50mb'}));
 app.use(express.urlencoded({limit: '50mb', extended: true, parameterLimit: 50000}));
@@ -198,6 +218,10 @@ app.post('/deploy', async (req, res) => {
     disableMaintenance(selected_deployment);
   });
 });
+
+if (process.env.SENTRY_DSN) {
+  app.use(Sentry.Handlers.errorHandler());
+}
 
 app.listen(process.env.HTTP_PORT, () => {
   console.log(`Deployer server listening on port ${process.env.HTTP_PORT}`);
