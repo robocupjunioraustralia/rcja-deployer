@@ -1,13 +1,23 @@
-# RCJ CMS Deployer
+# RCJCMS Deployer
 
-This is a tool used for managing deployments of the RCJ CMS (https://github.com/robocupjunior/rcj_cms)
+This is a tool used for managing deployments of the RCJCMS (https://github.com/robocupjunior/rcj_cms)
+
+## Required Software
+
+The following software is required for the various functions of this tool to work, they essentially match the RCJCMS requirements.\
+*Listed versions are the minimum required version, later versions may also work.*
+- NodeJS (https://nodejs.org/en/download) `20.x.x LTS`
+- PHP (https://www.php.net/downloads) `8.2`
+- MariaDB (https://mariadb.org/download) `10.6` (Including MySQL/MariaDB Dump)
+- Composer (https://getcomposer.org/download) `2.5`
+
 
 ## Installation
 
-- This tool requires NodeJS, if you haven't already installed it, you can find the latest version [here](https://nodejs.org/en/download)
+1. Install the required software
 1. Clone the repository: `git clone https://github.com/robocupjunioraustralia/rcja-deployer.git`
-2. CD to the location you cloned the above repo
-3. Install dependencies, by running the following command in CMD/Terminal etc.: `npm install`
+1. Change to the location you cloned the above repo `cd rcja-deployer`
+1. Install dependencies, by running the following command in CMD/Terminal etc.: `npm install`
 
 ## Configuration
 
@@ -24,7 +34,7 @@ The following variables must be set for the deployment scripts to work.
 | | |
 | NPM_PATH<br>PHP_PATH<br>MYSQL_PATH<br>MYSQLDUMP_PATH<br>COMPOSER_PATH | The paths to your npm, php, mysql, mysqldump, and composer executables.<br>There are some suggestions in the sample file for windows/linux |
 
-Some other variables of note include the following, these are only required if you want to run the full server (`npm start`)
+Some other variables of note include: (these are only required if you want to run the full server with `npm start`)
 | Variable | Description |
 | --- | --- |
 | DEPLOY_SECRET | Secret used for authenticating requests from GitHub |
@@ -33,7 +43,7 @@ Some other variables of note include the following, these are only required if y
 | ANON_PASSWORD | The (unhashed) password that will be set for every user after anonymisation. This may be useful for testing. It isn't required. |
 | REGO_DEPLOY_SCRIPT | Path to the rego deploy script, e.g. /home/apps/rcja-registration/deploy.sh |
 | REGO_DEPLOY_SECRET | Secret used for authenticating requests from rego GitHub |
-
+| SENTRY_DSN | The sentry DSN used when initialising Sentry |
 
 ### deployments.json
 
@@ -73,9 +83,11 @@ Here's a quick explanation of each variable:
 | branch_ref | The git ref for confirming the branch sent from the the webhook |
 
 
+---
+
 ## Usage
 
-### Start the server
+### **Start the server** *(For Production)*
 ```
 npm start
 ```
@@ -83,64 +95,50 @@ npm start
 - This starts the full server and listens for incoming deployment requests. Make sure all configuration is setup \
 This also creates a cronjob for each night at 12PM to sync a prod database to staging
 
-### Other Commands (Useful for development)
+---
 
-- You can use these commands to assist you while developing.\
-For instance, if you have recieved new changes from develop, it is a good idea to run the `npm run migrate` command to make sure your database is up to date.
+### **Useful Scripts** *(For Development/Testing)*
 
-- Append a deployment key to the end of any of these (`npm run migrate [deployment]`) to change the deployment the command will use. Otherwise, it will just choose the first one alphabetically.
+You can use these commands to assist you while developing.
+For instance, if you have recieved new changes from develop, it is a good idea to run the `npm run update` command to make sure your database is up to date.
 
+Append a deployment key to the end of any of these to change the deployment the command will target. Otherwise, it will just choose the first one alphabetically. For example, `npm run update [deployment]`
 
+---
+
+### "All-in-one" Interactive Script
+
+```
+npm run update
+```
+
+The most common command you should run during development. This tool allows you to:
+- Run any new migration scripts
+- Rebuild all views
+- Install NPM dependencies
+- Build assets, or actively watch for changes
+
+When you pull down changes from the repository, this script will help you ensure your database is up to date and all CSS/JS/etc assets are built correcly.
+
+Keep the watch script running whilst you are developing as this will automatically rebuild assets when you change them.
+
+---
+
+### Other Commands
 #### Install NPM Dependencies and build assets
 
-Installs all NPM dependencies and runs webpack to assets
-There are 3 modes for this that you can choose from:
-- `npm run build` - Builds the frontend for development
-- `npm run watch` - Builds the frontend for development and watches for changes
-- `npm run publish` - Builds the frontend for production
+There are 3 modes for building assets that you can choose from:
+- `npm run watch` - Builds the frontend for development and watches for changes *(recommended for development)*
+- `npm run build` - Builds the frontend once for development
+- `npm run publish` - Builds the frontend once for production
 
-When developing and making changes, you will probably want to use `npm run watch` \
-If you are encountering weird CSS/JS problems, try running `npm run build` to see if that fixes it. 
+#### Database Tools
 
-#### Migrate Database
-
-Runs any new migration scripts in the updates folder.
-```
-npm run migrate
-```
-
-#### Rebuild Views
-
-Rebuilds all views in the database.
-```
-npm run rebuildViews 
-```
-
-#### Rebuild Foreign Keys
-
-Rebuilds all foreign keys in the database.
-```
-npm run rebuildForeignKeys 
-```
-
-#### Rebuild Users
-
-Rebuilds all users in the database.
-```
-npm run rebuildUsers 
-```
-
-#### Anonymise Database
-
-Anonymises the database.
-```
-npm run anonymise
-```
-
-#### Run database sync
-
-Syncronises the production database to the development database
-- uses `env.SYNC_FROM_DEPLOYMENT` and `env.SYNC_TO_DEPLOYMENT` to determine which deployments to sync
-```
-npm run syncDatabases
+```sh
+npm run migrate # Runs any new migration scripts in the updates folder.
+npm run rebuildViews # Rebuilds all views in the database.
+npm run rebuildForeignKeys # Rebuilds all foreign keys in the database.
+npm run rebuildUsers # Rebuilds all users in the database.
+npm run anonymise # Anonymises the database.
+npm run syncDatabases # Syncronises the production database to the development database (env.SYNC_FROM_...)
 ```

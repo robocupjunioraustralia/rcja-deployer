@@ -50,7 +50,7 @@ async function triggerUpdate() {
     console.log(chalk.cyan(`[INFO] This tool allows you to:`));
     console.log(chalk.cyan(`[INFO] - Run any new migration scripts`));
     console.log(chalk.cyan(`[INFO] - Rebuild all views`));
-    console.log(chalk.cyan(`[INFO] - Install NPM dependancies`));
+    console.log(chalk.cyan(`[INFO] - Install NPM dependencies`));
     console.log(chalk.cyan(`[INFO] - Build assets, or actively watch for changes`));
     console.log(chalk.cyan(`[INFO]`));
     console.log(chalk.cyan(`[INFO] When you pull down changes from the repository,\n`
@@ -97,7 +97,7 @@ async function triggerUpdate() {
         await rebuildViews(selected_deployment);
     }
 
-    console.log(chalk.blue(`[DEPLOYER] Installing NPM dependancies and running ${user_answers.npm_command} script for ${selected_deployment.title}...`))
+    console.log(chalk.blue(`[DEPLOYER] Installing NPM dependencies and running ${user_answers.npm_command} script for ${selected_deployment.title}...`))
     await rebuildNPM(selected_deployment, user_answers.npm_command);
 }
 
@@ -273,7 +273,7 @@ async function triggerNPM() {
         }
     }
 
-    console.log(`Installing NPM dependancies and running ${selected_cmd} script for ${selected_deployment.title}...`)
+    console.log(`Installing NPM dependencies and running ${selected_cmd} script for ${selected_deployment.title}...`)
     await rebuildNPM(selected_deployment, selected_cmd);
 }
 
