@@ -30,6 +30,31 @@ dotenv.config();
 //   params:
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
 async function triggerUpdate() {
+    const git_status = await new Promise((resolve, reject) => {
+        exec('git fetch && git status', (error, stdout, stderr) => {
+            if (error) {
+                reject(error);
+                return;
+            }
+            resolve(stdout);
+        });
+    });
+
+    if (!git_status.includes('Your branch is up to date with')) {
+        const outdated_git_confirm = await inquirer.prompt([
+            {
+                type: 'confirm',
+                name: 'continue',
+                message: `Your deployer is out of date, you should 'git pull' first. Continue anyway?`,
+                default: false,
+            }
+        ]);
+
+        if (!outdated_git_confirm.continue) {
+            return;
+        }
+    }
+
     const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
     let selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
 
