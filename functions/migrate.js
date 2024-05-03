@@ -25,19 +25,7 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
     console.log('[MIGRATE] Running database migrations...')
     
     const updatesDir = path.join(selected_deployment.path, selected_deployment.migration_folder);
-    
-    // Get a list of migration directories in the updates folder
-    const migrationDirs = fs.readdirSync(updatesDir, { withFileTypes: true })
-    .filter(dirent => dirent.isDirectory())
-    .map(dirent => ({
-        name: dirent.name,
-        createdAt: fs.statSync(path.join(updatesDir, dirent.name)).birthtimeMs
-    }))
-    .sort((a, b) => a.createdAt - b.createdAt)
-    .map(dirent => dirent.name);
 
-    console.log('[MIGRATE] Found migrations: \n - ' + migrationDirs.join('\n - '));
-    
     const connectionMain = mysql.createConnection({
         host: process.env.DB_HOST,
         user: process.env.DB_USER,
@@ -69,17 +57,64 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
     if (hasFailed) { return [hasFailed, migrationLog]; }
     
     const ranMigrationsNames = ranMigrations.map(row => row.update_name);
-    const newMigrations = [];
-    
-    // For each migration directory, check if it has already been run
-    migrationDirs.forEach((migrationDir) => {
-        if (!ranMigrationsNames.includes(migrationDir)) {
-            console.log(`[MIGRATE] New migration found: ${migrationDir}`);
-            migrationLog += `\n[MIGRATE] New migration found: ${migrationDir}`;
-            newMigrations.push(migrationDir);
+    const allMigrationNames = [];
+
+    // Find all directories that contain a .sql or .php file within the updates folder
+    function findMigrations(dir) {
+        const files = fs.readdirSync(dir);
+        for (const file of files) {
+            const filePath = path.join(dir, file);
+            const stat = fs.statSync(filePath);
+            if (stat.isDirectory()) {
+                const subFiles = fs.readdirSync(filePath);
+                
+                // If this directory contains update scripts, it's a migration
+                if (subFiles.some(subFile => subFile.endsWith('.sql') || subFile.endsWith('.php'))) {
+                    const relativePath = path.relative(updatesDir, filePath);
+                    allMigrationNames.push(relativePath);
+                }
+
+                // Check for sub-directories
+                findMigrations(filePath);
+            }
         }
+    }
+
+    findMigrations(updatesDir);
+
+    // Sort the migrations based on the date they were created
+    const sortedMigrationNames = allMigrationNames.sort((a, b) => {
+        const aStat = fs.statSync(path.join(updatesDir, a));
+        const bStat = fs.statSync(path.join(updatesDir, b));
+
+        return aStat.birthtimeMs - bStat.birthtimeMs;
     });
-    
+
+    const newMigrations = [];
+    for (const migrationName of sortedMigrationNames) {
+        // For legacy reasons (previously migrations were stored in a single directory), we need to check for the old format
+        // If the migration folder is inside another directory, we can also consider the folder name as part of the migration name
+        const parsedPath = path.parse(migrationName);
+        if (parsedPath.dir !== '' && ranMigrationsNames.includes(parsedPath.base)) {
+            console.log(`[MIGRATE] Found legacy migration: ${parsedPath.base} - Updating to ${migrationName}`);
+            migrationLog += `\n[MIGRATE] Found legacy migration: ${parsedPath.base} - Updating to ${migrationName}`;
+
+            // Update the database to the new format
+            await queryMain("UPDATE updates SET update_name = ? WHERE update_name = ?", [migrationName, parsedPath.base]).catch((err) => {
+                console.error('[MIGRATE] Error updating legacy migration:', err.message);
+                migrationLog += '\n[MIGRATE] Error updating legacy migration: ' + err.message;
+                hasFailed = true;
+            });
+        } else if (!ranMigrationsNames.includes(migrationName)) {
+            newMigrations.push(migrationName);
+        }
+    };
+
+    newMigrations.forEach((migrationName) => {
+        console.log(`[MIGRATE] New migration found: ${migrationName}`);
+        migrationLog += `\n[MIGRATE] New migration found: ${migrationName}`;
+    });
+
     if (newMigrations.length === 0) {
         console.log('[MIGRATE] No new migrations to run');
         migrationLog += '\n[MIGRATE] No new migrations to run';
