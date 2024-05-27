@@ -23,7 +23,7 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
     if (hasFailed) { return [hasFailed, migrationLog]; }
 
     console.log('[MIGRATE] Running database migrations...')
-    
+
     const updatesDir = path.join(selected_deployment.path, selected_deployment.migration_folder);
 
     const connectionMain = mysql.createConnection({
@@ -32,10 +32,10 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
         password: process.env.DB_PASSWORD,
         database: `${selected_deployment.database_prefix}_main`,
     });
-    
+
     const connectMain = util.promisify(connectionMain.connect.bind(connectionMain));
     const queryMain = util.promisify(connectionMain.query.bind(connectionMain));
-    
+
     // Connect to the main database
     await connectMain().catch((err) => {
         console.error('[MIGRATE] Error connecting to database:', err.message);
@@ -46,7 +46,7 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
     if (hasFailed) { return [hasFailed, migrationLog]; }
     console.log(`[MIGRATE] Successfully connected to database ${selected_deployment.database_prefix}_main`);
     migrationLog += `\n[MIGRATE] Successfully connected to database ${selected_deployment.database_prefix}_main`;
-    
+
     // Read the updates table to get a list of migrations that have already been run
     const ranMigrations = await queryMain('SELECT update_name FROM updates').catch((err) => {
         console.error('[MIGRATE] Error reading updates table:', err.message);
@@ -55,7 +55,7 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
         connectionMain.end();
     });
     if (hasFailed) { return [hasFailed, migrationLog]; }
-    
+
     const ranMigrationsNames = ranMigrations.map(row => row.update_name);
     const allMigrationNames = [];
 
@@ -67,11 +67,14 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
             const stat = fs.statSync(filePath);
             if (stat.isDirectory()) {
                 const subFiles = fs.readdirSync(filePath);
-                
+
                 // If this directory contains update scripts, it's a migration
                 if (subFiles.some(subFile => subFile.endsWith('.sql') || subFile.endsWith('.php'))) {
                     const relativePath = path.relative(updatesDir, filePath);
-                    allMigrationNames.push(relativePath);
+
+                    // To avoid windows vs linux clashes, we need to replace backslashes with forward slashes
+                    const migrationName = relativePath.replace(/\\/g, '/');
+                    allMigrationNames.push(migrationName);
                 }
 
                 // Check for sub-directories
@@ -95,12 +98,13 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
         // For legacy reasons (previously migrations were stored in a single directory), we need to check for the old format
         // If the migration folder is inside another directory, we can also consider the folder name as part of the migration name
         const parsedPath = path.parse(migrationName);
-        if (parsedPath.dir !== '' && ranMigrationsNames.includes(parsedPath.base)) {
-            console.log(`[MIGRATE] Found legacy migration: ${parsedPath.base} - Updating to ${migrationName}`);
-            migrationLog += `\n[MIGRATE] Found legacy migration: ${parsedPath.base} - Updating to ${migrationName}`;
+        const parsedPathBase = parsedPath.dir !== '' ? parsedPath.base.replace(/\\/g, '/') : null;
+        if (parsedPath.dir !== '' && ranMigrationsNames.includes(parsedPathBase)) {
+            console.log(`[MIGRATE] Found legacy migration: ${parsedPathBase} - Updating to ${migrationName}`);
+            migrationLog += `\n[MIGRATE] Found legacy migration: ${parsedPathBase} - Updating to ${migrationName}`;
 
             // Update the database to the new format
-            await queryMain("UPDATE updates SET update_name = ? WHERE update_name = ?", [migrationName, parsedPath.base]).catch((err) => {
+            await queryMain("UPDATE updates SET update_name = ? WHERE update_name = ?", [migrationName, parsedPathBase]).catch((err) => {
                 console.error('[MIGRATE] Error updating legacy migration:', err.message);
                 migrationLog += '\n[MIGRATE] Error updating legacy migration: ' + err.message;
                 hasFailed = true;
@@ -121,7 +125,7 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
         connectionMain.end();
         return [hasFailed, migrationLog];
     }
-    
+
     // Create a full backup before proceeding with any migration
     if (!skipBackup) {
         const [hasBackupFailed, backupLog] = await createDatabaseBackup(selected_deployment);
@@ -133,17 +137,17 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
             return [true, migrationLog];
         }
     }
-        
+
     // For each new migration, run the SQL files in the directory
     for (const migrationDir of newMigrations) {
         if (hasFailed) { break; }
         const migrationDirPath = path.join(updatesDir, migrationDir);
-        
+
         // Loop through each migration file in the directory
         const migrationFiles = fs.readdirSync(migrationDirPath)
         .filter(filename => filename.endsWith('.sql') || filename.endsWith('.php'))
         .sort();
-        
+
         let allFiles = fs.readdirSync(migrationDirPath);
 
         // if allFiles includes "SKIP_MIGRATION" then skip this migration
@@ -152,7 +156,7 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
             migrationLog += `\n[MIGRATE] Skipping migration ${migrationDir} because SKIP_MIGRATION file was found`;
             allFiles = []; // empty the array so that the migration does not run, but still marks as fulfilled
         }
-        
+
         for (const migrationFile of allFiles) {
             if (hasFailed) { break; }
             if (!migrationFiles.includes(migrationFile)) {
@@ -161,24 +165,24 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
                 continue;
             }
             const migrationFilePath = path.join(migrationDirPath, migrationFile);
-            
+
             if (migrationFile.endsWith(".sql")) {
                 // Run the SQL migration file
-                
+
                 // Ensure the migration file follows the expected format
                 if (!/^\d{2}-(comp|main)-/.test(migrationFile)) {
                     console.warn(`[MIGRATE] WARNING: Skipping migration file ${migrationDir}/${migrationFile} because it does not follow the expected format.`);
                     migrationLog += `\n[MIGRATE] WARNING: Skipping migration file ${migrationDir}/${migrationFile} because it does not follow the expected format.`;
                     continue;
                 }
-                
+
                 const filenameParts = migrationFile.split('-');
                 const isMainMigration = filenameParts[1] === 'main';
                 const isCompMigration = filenameParts[1] === 'comp';
-                
+
                 // console.log(`[MIGRATE] Running migration (SQL) ${migrationDir}/${migrationFile}...`);
                 // migrationLog += `\n[MIGRATE] Running migration (SQL) ${migrationDir}/${migrationFile}...`;
-                
+
                 const runSQLMigration = async (database_name) => {
                     return new Promise((resolve, reject) => {
                         const migrateCmd = spawn(process.env.MYSQL_PATH, [
@@ -187,11 +191,11 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
                             '-p' + process.env.DB_PASSWORD,
                             database_name,
                         ]);
-                        
+
                         const migrationScript = fs.readFileSync(migrationFilePath, 'utf8');
                         migrateCmd.stdin.write(migrationScript);
                         migrateCmd.stdin.end();
-                        
+
                         migrateCmd.on('exit', (code) => {
                             if (code === 0) {
                                 console.log(`[MIGRATE] SQL Migration ${migrationDir}/${migrationFile} complete on ${database_name}`);
@@ -203,25 +207,25 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
                                 reject(code);
                             }
                         });
-                        
+
                         migrateCmd.on('error', (err) => {
                             console.error(`[MIGRATE] Error running SQL migration ${migrationDir}/${migrationFile} on ${database_name}`);
                             migrationLog += `\n[MIGRATE] Error running SQL migration ${migrationDir}/${migrationFile} on ${database_name}`;
                             reject(err);
                         });
-                        
+
                         migrateCmd.stdout.on('data', (data) => {
                             console.log(data.toString());
                             migrationLog += data;
                         });
-                        
+
                         migrateCmd.stderr.on('data', (data) => {
                             console.log(data.toString());
                             migrationLog += data;
                         });
                     });
                 }
-                
+
                 if (isMainMigration) {
                     // Run the migration file on the main database
                     await runSQLMigration(`${selected_deployment.database_prefix}_main`).catch((err) => {
@@ -252,7 +256,7 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
                         ], {
                             cwd: selected_deployment.path
                         });
-                        
+
                         migrateCmd.on('exit', (code) => {
                             if (code === 0) {
                                 console.log(`[MIGRATE] PHP Migration ${migrationDir}/${migrationFile} complete`);
@@ -264,32 +268,32 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
                                 reject(code);
                             }
                         });
-                        
+
                         migrateCmd.on('error', (err) => {
                             console.error(`[MIGRATE] Error running PHP migration ${migrationDir}/${migrationFile}`);
                             migrationLog += `\n[MIGRATE] Error running PHP migration ${migrationDir}/${migrationFile}`;
                             reject(err);
                         });
-                        
+
                         migrateCmd.stdout.on('data', (data) => {
                             console.log(data.toString());
                             migrationLog += data;
                         });
-                        
+
                         migrateCmd.stderr.on('data', (data) => {
                             console.log(data.toString());
                             migrationLog += data;
                         });
                     });
                 }
-                
+
                 await runPHPMigration().catch((err) => {
                     console.error('[MIGRATE] Error running PHP migration:', err?.message || err);
                     migrationLog += '\n[MIGRATE] Error running PHP migration: ' + (err?.message || err);
                     hasFailed = true;
                 });
             }
-            
+
             if (hasFailed) {
                 console.log(`[MIGRATE] Migration failed for ${migrationDir}`);
                 migrationLog += `\n[MIGRATE] Migration failed for ${migrationDir}`;
@@ -299,7 +303,7 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
         }
         // Store the migration as having been run in the main database
         const query = 'INSERT INTO updates (update_name) VALUES (?)';
-        
+
         await queryMain(query, [migrationDir]).catch((err) => {
             console.error('[MIGRATE] Error storing migration in main database:', err.message);
             migrationLog += '\n[MIGRATE] Error storing migration in main database: ' + err.message;
@@ -307,9 +311,9 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
             connectionMain.end();
         });
     }
-    
+
     connectionMain.end();
-    
+
     return [hasFailed, migrationLog];
 }
 
