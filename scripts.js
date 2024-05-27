@@ -273,7 +273,7 @@ async function triggerRebuildForeignKeys() {
 // npm run build (deployment)
 // npm run watch (deployment)
 // npm run publish (deployment)
-//   Triggers npm install, npm prune, then npm run build/watch/publish
+//   Triggers npm ci, npm prune, then npm run build/watch/publish
 //
 //   params:
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json

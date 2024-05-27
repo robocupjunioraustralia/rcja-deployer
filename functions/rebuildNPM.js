@@ -50,9 +50,9 @@ async function rebuildNPM(selected_deployment, buildCmd) {
     console.log("[NPM] Installing npm packages...");
     npmLog += "\n[NPM] Installing npm packages...";
 
-    await spawnNpm(process.env.NPM_PATH, ['install']).catch((err) => {
-        console.error('[NPM] npm install failed');
-        npmLog += '\n[NPM] npm install failed';
+    await spawnNpm(process.env.NPM_PATH, ['ci']).catch((err) => {
+        console.error('[NPM] npm ci failed');
+        npmLog += '\n[NPM] npm ci failed';
         console.error(err);
         npmLog += `\n${err}`;
         hasFailed = true;
