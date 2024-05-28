@@ -36,10 +36,10 @@ CREATE TABLE `user` (
     `first_name` varchar(60) NOT NULL,
     `last_name` varchar(60) NOT NULL,
     `username` varchar(50) NOT NULL,
-    `phone_number` varchar(50) NOT NULL,
+    `phone_number` varchar(50) NULL,
     `old_first_name` varchar(60) NOT NULL,
     `old_last_name` varchar(60) NOT NULL,
     `old_username` varchar(50) NOT NULL,
-    `old_phone_number` varchar(50) NOT NULL,
+    `old_phone_number` varchar(50) NULL,
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
