@@ -5,7 +5,7 @@ DROP TABLE IF EXISTS `user`;
 
 CREATE TABLE `imported_team_member` (
     `id` int(11) NOT NULL AUTO_INCREMENT,
-    `uid_comp` varchar(13) NOT NULL,
+    `uid_comp` varchar(16) NOT NULL,
     `uid_imported_team_member` varchar(13) NOT NULL,
     `first_name` varchar(60) NOT NULL,
     `last_name` varchar(60) NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE `imported_team_member` (
 
 CREATE TABLE `imported_mentor` (
     `id` int(11) NOT NULL AUTO_INCREMENT,
-    `uid_comp` varchar(13) NOT NULL,
+    `uid_comp` varchar(16) NOT NULL,
     `uid_imported_mentor` varchar(13) NOT NULL,
     `mentor_first` varchar(100) NOT NULL,
     `mentor_last` varchar(100) NOT NULL,
@@ -32,7 +32,7 @@ CREATE TABLE `imported_mentor` (
 CREATE TABLE `user` (
     `id` int(11) NOT NULL AUTO_INCREMENT,
     `uid_user` varchar(13) NOT NULL,
-    `uid_comp` varchar(13) NOT NULL,
+    `uid_comp` varchar(16) NOT NULL,
     `first_name` varchar(60) NOT NULL,
     `last_name` varchar(60) NOT NULL,
     `username` varchar(50) NOT NULL,
