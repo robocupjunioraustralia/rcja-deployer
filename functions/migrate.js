@@ -192,6 +192,32 @@ function createMigrationTempDir(migrationPath) {
     return tempDir;
 }
 
+/**
+ * Check if the version of the deployment is compatible with this version of the deployer
+ * The current minimum version is 24.4.0 due to changes in the migration structure
+ * @param {[number, number, number]} minVersion The minimum version required for compatibility
+ * @param {string|null} deploymentVersion The version of the deployment (e.g. "24.4.0"), or null if unknown
+ * @returns {boolean} True if the deployment version is compatible, false otherwise
+ */
+function isDeploymentVersionCompatible(minVersion, deploymentVersion) {
+    if (deploymentVersion === null) return false;
+
+    const versionParts = deploymentVersion.split('.').map(part => parseInt(part, 10));
+
+    const majorVersion = versionParts[0];
+    const minorVersion = versionParts[1];
+    const patchVersion = versionParts[2];
+
+    if (majorVersion < minVersion[0]) return false;
+
+    if (majorVersion === minVersion[0]) {
+        if (minorVersion < minVersion[1]) return false;
+        if (minorVersion === minVersion[1] && patchVersion < minVersion[2]) return false;
+    }
+
+    return true;
+}
+
 
 async function runDatabaseMigrations(selected_deployment, skipBackup) {
     let hasFailed = false;
@@ -212,6 +238,19 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
 
     const deploymentVersion = getDeploymentVersion(selected_deployment.path);
     const deploymentTags = await getDeploymentTags(selected_deployment.path);
+
+    // Check if the deployment version is compatible with this version of the deployer
+    const minVersion = [24, 4, 0];
+    if (isDeploymentVersionCompatible(minVersion, deploymentVersion) === false) {
+        const failMessage = `[MIGRATE] Your deployment is not compatible with this version of the deployer`
+            + `\n   - Deployment version: ${deploymentVersion || 'Unknown'}`
+            + `\n   - Minimum version: ${minVersion.join('.')}`
+            + `\n   - Please update the deployment to a compatible version or use an older version of the deployer before proceeding`;
+
+        console.error(failMessage);
+        migrationLog += `\n${failMessage}`;
+        return [true, migrationLog];
+    }
 
     /**
      * The general structure of the updates folder is as follows:
