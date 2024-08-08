@@ -62,7 +62,7 @@ async function triggerUpdate() {
     if (process.argv[process.argv.indexOf('update') + 1] !== undefined) {
         const deployment = process.argv[process.argv.indexOf('update') + 1];
         const deployment_info = deployments_info[deployment];
-        
+
         if (deployment_info) {
             selected_deployment = deployment_info;
         } else {
@@ -114,7 +114,11 @@ async function triggerUpdate() {
 
     if (user_answers.run_migrations) {
         console.log(chalk.blue(`[DEPLOYER] Running migrations on ${selected_deployment.title}...`))
-        await runDatabaseMigrations(selected_deployment, !selected_deployment.backup); 
+        const [migrateFailed, migrateLog] = await runDatabaseMigrations(selected_deployment, !selected_deployment.backup);
+        if (migrateFailed) {
+            console.error(chalk.red(`[DEPLOYER] Failed to run migrations on ${selected_deployment.title}`));
+            return;
+        }
     }
 
     if (user_answers.rebuild_views) {
@@ -128,8 +132,8 @@ async function triggerUpdate() {
 
 // npm run migrate (deployment)
 //   Runs any new migration scripts in the updates folder
-// 
-//   params: 
+//
+//   params:
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
 async function triggerMigrate() {
     const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
@@ -139,7 +143,7 @@ async function triggerMigrate() {
     if (process.argv[process.argv.indexOf('migrate') + 1] !== undefined) {
         const deployment = process.argv[process.argv.indexOf('migrate') + 1];
         const deployment_info = deployments_info[deployment];
-        
+
         if (deployment_info) {
             selected_deployment = deployment_info;
         } else {
@@ -147,9 +151,15 @@ async function triggerMigrate() {
             return;
         }
     }
-    
+
     console.log(`Running migrations on ${selected_deployment.title}...`)
-    await runDatabaseMigrations(selected_deployment, !selected_deployment.backup); 
+    const [migrateFailed, migrateLog] = await runDatabaseMigrations(selected_deployment, !selected_deployment.backup);
+
+    if (migrateFailed) {
+        console.error(`Failed to run migrations on ${selected_deployment.title}`);
+        return;
+    }
+
     console.log(`Rebuilding views on ${selected_deployment.title}...`)
     await rebuildViews(selected_deployment);
     console.log(`\n\nDone!`)
@@ -168,7 +178,7 @@ async function triggerRebuildViews() {
     if (process.argv[process.argv.indexOf('rebuildViews') + 1] !== undefined) {
         const deployment = process.argv[process.argv.indexOf('rebuildViews') + 1];
         const deployment_info = deployments_info[deployment];
-        
+
         if (deployment_info) {
             selected_deployment = deployment_info;
         } else {
@@ -194,7 +204,7 @@ async function triggerAnonymise() {
     if (process.argv[process.argv.indexOf('anonymise') + 1] !== undefined) {
         const deployment = process.argv[process.argv.indexOf('anonymise') + 1];
         const deployment_info = deployments_info[deployment];
-        
+
         if (deployment_info) {
             selected_deployment = deployment_info;
         } else {
@@ -231,7 +241,7 @@ async function triggerRebuildUsers() {
     if (process.argv[process.argv.indexOf('rebuildUsers') + 1] !== undefined) {
         const deployment = process.argv[process.argv.indexOf('rebuildUsers') + 1];
         const deployment_info = deployments_info[deployment];
-        
+
         if (deployment_info) {
             selected_deployment = deployment_info;
         } else {
@@ -257,7 +267,7 @@ async function triggerRebuildForeignKeys() {
     if (process.argv[process.argv.indexOf('rebuildForeignKeys') + 1] !== undefined) {
         const deployment = process.argv[process.argv.indexOf('rebuildForeignKeys') + 1];
         const deployment_info = deployments_info[deployment];
-        
+
         if (deployment_info) {
             selected_deployment = deployment_info;
         } else {
@@ -289,7 +299,7 @@ async function triggerNPM() {
     if (process.argv[process.argv.indexOf(selected_cmd) + 1] !== undefined) {
         const deployment = process.argv[process.argv.indexOf(selected_cmd) + 1];
         const deployment_info = deployments_info[deployment];
-        
+
         if (deployment_info) {
             selected_deployment = deployment_info;
         } else {
