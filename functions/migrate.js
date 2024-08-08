@@ -37,6 +37,7 @@ async function getDeploymentTags(deploymentPath) {
     return new Promise((resolve, reject) => {
         const git = spawn('git', ['tag'], {
             cwd: deploymentPath,
+            shell: true
         });
 
         let tags = '';
@@ -72,6 +73,7 @@ async function deploymentHasUncommittedChanges(deploymentPath) {
     return new Promise((resolve, reject) => {
         const git = spawn('git', ['status', '--porcelain'], {
             cwd: deploymentPath,
+            shell: true
         });
 
         let status = '';
@@ -112,6 +114,7 @@ async function getCurrentBranch(deploymentPath, useHash = false) {
             useHash ? ['rev-parse', 'HEAD'] : ['rev-parse', '--abbrev-ref', 'HEAD'],
             {
                 cwd: deploymentPath,
+                shell: true
             }
         );
 
@@ -155,6 +158,7 @@ async function checkoutDeploymentTo(deploymentPath, target) {
     return new Promise((resolve, reject) => {
         const git = spawn('git', ['checkout', target], {
             cwd: deploymentPath,
+            shell: true
         });
 
         git.stdout.on('data', (data) => {
@@ -552,7 +556,7 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
                                 process.env.DB_USER,
                                 '-p' + process.env.DB_PASSWORD,
                                 database_name,
-                            ]);
+                            ], { shell: true });
 
                             const migrationScript = fs.readFileSync(migrationFilePath, 'utf8');
                             migrateCmd.stdin.write(migrationScript);
@@ -616,7 +620,8 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
                             const migrateCmd = spawn(process.env.PHP_PATH, [
                                 migrationFilePath
                             ], {
-                                cwd: selected_deployment.path
+                                cwd: selected_deployment.path,
+                                shell: true
                             });
 
                             migrateCmd.on('exit', (code) => {

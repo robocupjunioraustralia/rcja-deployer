@@ -4,7 +4,7 @@ const { spawn } = require('child_process');
 async function rebuildForeignKeys(deploymentInfo) {
     let rebuildFKeysFailed = false;
     let rebuildFKeysLog = "";
-    
+
     try {
         const runFKPHP = async (database_name, database_type, deploymentInfo) => {
             return new Promise((resolve, reject) => {
@@ -12,9 +12,10 @@ async function rebuildForeignKeys(deploymentInfo) {
                     database_type == "comp" ? "utils/db_files/1.5_tables_script_fks.php" : "utils/db_files/main_1.5_tables_script_fks.php",
                     database_name
                 ], {
-                    cwd: deploymentInfo.path
+                    cwd: deploymentInfo.path,
+                    shell: true
                 });
-                
+
                 viewCmd.on('exit', (code) => {
                     if (code === 0) {
                         console.log(`[REBUILDFK]    PHP Migration for ${database_name} complete`);
@@ -26,18 +27,18 @@ async function rebuildForeignKeys(deploymentInfo) {
                         reject(code);
                     }
                 });
-                
+
                 viewCmd.on('error', (err) => {
                     console.error(`[REBUILDFK]    Error running PHP view file on ${database_name}`);
                     rebuildFKeysLog += `\n[REBUILDFK]    Error running PHP view file on ${database_name}`;
                     reject(err);
                 });
-                
+
                 viewCmd.stdout.on('data', (data) => {
                     console.log(data.toString());
                     rebuildFKeysLog += data;
                 });
-                
+
                 viewCmd.stderr.on('data', (data) => {
                     console.log(data.toString());
                     rebuildFKeysLog += data;
@@ -55,7 +56,7 @@ async function rebuildForeignKeys(deploymentInfo) {
         console.log("[REBUILDFK] Connected to MariaDB server");
         rebuildFKeysLog += "\n[REBUILDFK] Connected to MariaDB server";
 
-        // Rebuild main 
+        // Rebuild main
         console.log(`[REBUILDFK] Rebuilding foreign keys in ${deploymentInfo.database_prefix}_main`);
         rebuildFKeysLog += `\n[REBUILDFK] Rebuilding foreign keys in ${deploymentInfo.database_prefix}_main`;
         await conn.query(`USE ${deploymentInfo.database_prefix}_main`);
@@ -63,9 +64,9 @@ async function rebuildForeignKeys(deploymentInfo) {
             `SELECT TABLE_NAME, CONSTRAINT_NAME, COLUMN_NAME
              FROM information_schema.KEY_COLUMN_USAGE
              WHERE CONSTRAINT_SCHEMA = '${deploymentInfo.database_prefix}_main'
-                AND REFERENCED_COLUMN_NAME IS NOT NULL 
+                AND REFERENCED_COLUMN_NAME IS NOT NULL
                 AND REFERENCED_TABLE_NAME IS NOT NULL;`);
-        
+
         for (const key of existingKeysToDrop) {
             const tableName = key.TABLE_NAME;
             const constraintName = key.CONSTRAINT_NAME;
@@ -97,7 +98,7 @@ async function rebuildForeignKeys(deploymentInfo) {
 
         for (const compDb of compDatabases) {
             const dbName = compDb.SCHEMA_NAME;
-            
+
             console.log(`[REBUILDFK] Rebuilding foreign keys in ${dbName}`);
             rebuildFKeysLog += `\n[REBUILDFK] Rebuilding foreign keys in ${dbName}`;
 
@@ -106,16 +107,16 @@ async function rebuildForeignKeys(deploymentInfo) {
                 `SELECT TABLE_NAME, CONSTRAINT_NAME, COLUMN_NAME
                  FROM information_schema.KEY_COLUMN_USAGE
                  WHERE CONSTRAINT_SCHEMA = '${dbName}'
-                    AND REFERENCED_COLUMN_NAME IS NOT NULL 
+                    AND REFERENCED_COLUMN_NAME IS NOT NULL
                     AND REFERENCED_TABLE_NAME IS NOT NULL;`);
-                    
+
             for (const key of existingKeysToDrop) {
                 const tableName = key.TABLE_NAME;
                 const constraintName = key.CONSTRAINT_NAME;
 
                 await conn.query(`ALTER TABLE ${tableName} DROP FOREIGN KEY ${constraintName}`);
             }
-            
+
             if (existingKeysToDrop.length > 0) {
                 console.log(`[REBUILDFK]    Dropped ${existingKeysToDrop.length} existing foreign keys`);
                 rebuildFKeysLog += `\n[REBUILDFK]    Dropped ${existingKeysToDrop.length} existing foreign keys`;
@@ -136,7 +137,7 @@ async function rebuildForeignKeys(deploymentInfo) {
             console.log(`[REBUILDFK] Rebuilding of all foreign keys complete`);
             rebuildFKeysLog += `\n[REBUILDFK] Rebuilding of all foreign keys complete`;
         }
-        
+
         // Disconnect from the MariaDB server
         conn.release();
         await pool.end();

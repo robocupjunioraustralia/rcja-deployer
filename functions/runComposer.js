@@ -10,6 +10,7 @@ async function runComposer(selected_deployment) {
         return new Promise((resolve, reject) => {
             const composer = spawn(process.env.COMPOSER_PATH, ['install', '--no-dev', '--no-interaction', '--no-progress', '--optimize-autoloader'], {
                 cwd: path.join(selected_deployment.path),
+                shell: true
             });
             composer.stdout.on('data', (data) => {
                 console.log(data.toString());

@@ -35,7 +35,7 @@ if (process.env.SENTRY_DSN) {
     tracesSampleRate: 1.0,
     profilesSampleRate: 1.0,
   });
-  
+
   app.use(Sentry.Handlers.requestHandler());
   app.use(Sentry.Handlers.tracingHandler());
 }
@@ -87,20 +87,20 @@ app.post('/deploy/rego', async (req, res) => {
       shell: true,
       cwd: process.env.REGO_DEPLOY_PATH
     });
-    
+
     deployCmd.stdout.on('data', (data) => {
       console.log("[REGO] " + data.toString())
       res.write(data);
     });
-  
+
     deployCmd.stderr.on('data', (data) => {
       console.log("[REGO] " + data.toString())
       res.write(data);
     });
-  
+
     deployCmd.on('close', (code) => {
       console.log(`[REGO] Process exited with code ${code}`);
-      
+
       if (code !== 0) {
         res.write(`Process exited with code ${code}`);
         res.status(500).end();
@@ -198,7 +198,7 @@ app.post('/deploy', async (req, res) => {
       writeLog(deployLog, false, "deploy");
       return res.status(500).send('Error executing database migrations');
     }
-  
+
     // Rebuild the views
     console.log('[SYNC] Rebuilding views...')
     deployLog += "\n--- REBUILDING VIEWS ---\n";
@@ -206,7 +206,7 @@ app.post('/deploy', async (req, res) => {
     console.log("[SYNC] View rebuild complete: ", rebuildFailed ? "FAIL" : "SUCCESS");
     deployLog += rebuildLog;
     deployLog += `\n\n--- REBUILDING VIEWS: ${rebuildFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
-  
+
     if (rebuildFailed) {
       writeLog(deployLog, false, "sync");
       console.error("[SYNC] View rebuild failed");
@@ -236,7 +236,7 @@ function triggerSyncDatabases() {
 
 async function runPHPScript(filePath, cwd) {
   return new Promise((resolve, reject) => {
-    const migrateCmd = spawn(process.env.PHP_PATH, [filePath], { cwd: cwd });
+    const migrateCmd = spawn(process.env.PHP_PATH, [filePath], { cwd: cwd, shell: true });
 
     let scriptLog = "";
     migrateCmd.on('exit', (code) => {
@@ -245,16 +245,16 @@ async function runPHPScript(filePath, cwd) {
       }
       reject(`PHP script exited with code ${code?.message || code}:\n${scriptLog}`)
     });
-    
+
     migrateCmd.on('error', (err) => {
       reject(`PHP script errored:\n${err?.message || err}\n${scriptLog}`);
     });
-    
+
     migrateCmd.stdout.on('data', (data) => {
       console.log(data.toString());
       scriptLog += data;
     });
-    
+
     migrateCmd.stderr.on('data', (data) => {
       console.log(data.toString());
       scriptLog += data;
@@ -265,7 +265,7 @@ async function runPHPScript(filePath, cwd) {
 async function triggerCMSNightly() {
   const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
   const deployments = Object.values(deployments_info);
-  
+
   const nightlyStart = new Date();
   let nightlyLog = `--- Running nightly scripts on ${deployments.length} deployments ---\n`;
   nightlyLog += `[NIGHTLY] Started on ${nightlyStart.toISOString()}\n`;
@@ -292,9 +292,9 @@ async function triggerCMSNightly() {
         nightlyLog += `[NIGHTLY] Error running script: ${err?.message || err}\n`;
 
         writeLog(nightlyLog, false, "nightly");
-        return;  
+        return;
       }
-      
+
       console.log('[NIGHTLY] Script complete.');
       nightlyLog += `[NIGHTLY] Script complete.\n\n`;
     } else {
