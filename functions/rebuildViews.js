@@ -6,8 +6,8 @@ const { spawn } = require('child_process');
 async function rebuildViews(deploymentInfo) {
     let rebuildViewsFailed = false;
     let rebuildViewsLog = "";
-    
-    
+
+
     try {
         const runViewSQL = async (database_name, deploymentInfo) => {
             return new Promise((resolve, reject) => {
@@ -16,12 +16,12 @@ async function rebuildViews(deploymentInfo) {
                     process.env.DB_USER,
                     '-p' + process.env.DB_PASSWORD,
                     database_name,
-                ]);
-                
+                ], { shell: true });
+
                 const viewScript = fs.readFileSync(path.join(deploymentInfo.path, 'utils/db_files/2_views_script.sql'), 'utf8');
                 viewCmd.stdin.write(viewScript);
                 viewCmd.stdin.end();
-                
+
                 viewCmd.on('exit', (code) => {
                     if (code === 0) {
                         console.log(`[MIGRATE] View file complete on ${database_name}`);
@@ -33,18 +33,18 @@ async function rebuildViews(deploymentInfo) {
                         reject(code);
                     }
                 });
-                
+
                 viewCmd.on('error', (err) => {
                     console.error(`[REBUILDVIEW] Error running view file on ${database_name}`);
                     rebuildViewsLog += `\n[REBUILDVIEW] Error running view file on ${database_name}`;
                     reject(err);
                 });
-                
+
                 viewCmd.stdout.on('data', (data) => {
                     console.log(data.toString());
                     rebuildViewsLog += data;
                 });
-                
+
                 viewCmd.stderr.on('data', (data) => {
                     console.log(data.toString());
                     rebuildViewsLog += data;
@@ -58,9 +58,10 @@ async function rebuildViews(deploymentInfo) {
                     "utils/db_files/2.5_views_script_alt.php",
                     database_name
                 ], {
-                    cwd: deploymentInfo.path
+                    cwd: deploymentInfo.path,
+                    shell: true
                 });
-                
+
                 viewCmd.on('exit', (code) => {
                     if (code === 0) {
                         console.log(`[REBUILDVIEW] PHP Migration for ${database_name} complete`);
@@ -72,18 +73,18 @@ async function rebuildViews(deploymentInfo) {
                         reject(code);
                     }
                 });
-                
+
                 viewCmd.on('error', (err) => {
                     console.error(`[REBUILDVIEW] Error running PHP view file on ${database_name}`);
                     rebuildViewsLog += `\n[REBUILDVIEW] Error running PHP view file on ${database_name}`;
                     reject(err);
                 });
-                
+
                 viewCmd.stdout.on('data', (data) => {
                     console.log(data.toString());
                     rebuildViewsLog += data;
                 });
-                
+
                 viewCmd.stderr.on('data', (data) => {
                     console.log(data.toString());
                     rebuildViewsLog += data;
@@ -106,7 +107,7 @@ async function rebuildViews(deploymentInfo) {
 
         for (const compDb of compDatabases) {
             const dbName = compDb.SCHEMA_NAME;
-            
+
             console.log(`[REBUILDVIEW] Rebuilding SQL views in ${dbName}`);
             rebuildViewsLog += `\n[REBUILDVIEW] Rebuilding SQL views in ${dbName}`;
 
@@ -137,7 +138,7 @@ async function rebuildViews(deploymentInfo) {
             console.log(`[REBUILDVIEW] Rebuilding of all views complete`);
             rebuildViewsLog += `\n[REBUILDVIEW] Rebuilding of all views complete`;
         }
-        
+
         // Disconnect from the MariaDB server
         conn.release();
         await pool.end();

@@ -18,6 +18,7 @@ async function rebuildNPM(selected_deployment, buildCmd) {
                     ...process.env,
                     NPM_CONFIG_COLOR: 'always',
                     NPM_CONFIG_FUND: 'false',
+                    shell: true,
                 }
             });
             npm.stdout.on('data', (data) => {
