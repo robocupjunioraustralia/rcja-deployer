@@ -66,6 +66,12 @@ app.get("/deploy/ping", (req, res) => {
 });
 
 // GitHub actions endpoint for deployments of robocupjunior/RCJA_Registration_System
+// Action has two secrets:
+// - DEPLOY_TOKEN: Matches process.env.REGO_DEPLOY_SECRET for authentication
+// - DEPLOY_URL: POST https://rcja.app/deploy/rego
+// Expects a JSON payload with:
+// - image: the SHA of the deployment
+// - environment: the environment to deploy to "prod" or "staging"
 app.post('/deploy/rego', async (req, res) => {
   console.log(req.body);
   const authHeader = req.headers.authorization;
@@ -77,13 +83,19 @@ app.post('/deploy/rego', async (req, res) => {
     return res.status(400).send('Invalid or missing DEPLOY_SHA');
   }
 
+  if (!req.body.environment || !["prod", "staging"].includes(req.body.environment)) {
+    return res.status(400).send('Invalid or missing DEPLOY_ENV');
+  }
+
+  target_env = req.body.environment === "prod" ? "production" : "staging";
+
   console.log(`[REGO] Received deployment request for ${req.body.image}...`)
 
   res.setHeader('Content-Type', 'text/plain');
 
   // Run process.env.REGO_DEPLOY_SCRIPT with a param of the sha. Pipe the output to the response.
   try {
-    const deployCmd = spawn("sudo", [process.env.REGO_DEPLOY_SCRIPT, req.body.image], {
+    const deployCmd = spawn("sudo", [process.env.REGO_DEPLOY_SCRIPT, req.body.image, target_env], {
       shell: true,
       cwd: process.env.REGO_DEPLOY_PATH
     });
