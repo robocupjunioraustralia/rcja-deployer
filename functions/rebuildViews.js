@@ -103,7 +103,7 @@ async function rebuildViews(deploymentInfo) {
         rebuildViewsLog += "\n[REBUILDVIEW] Connected to MariaDB server";
 
         // Retrieve the list of comp databases
-        const compDatabases = await conn.query(`SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE '${deploymentInfo.database_prefix}_comp_%'`);
+        const compDatabases = await conn.query(`SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE '${deploymentInfo.database_prefix}_comp_%' ORDER BY SCHEMA_NAME DESC`);
 
         for (const compDb of compDatabases) {
             const dbName = compDb.SCHEMA_NAME;
