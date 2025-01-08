@@ -291,6 +291,10 @@ async function runDatabaseMigrations(selected_deployment, skipBackup) {
             const stat = fs.statSync(migrationPath);
             if (stat.isDirectory()) {
                 const migrationFiles = fs.readdirSync(migrationPath);
+
+                // If a "SKIP_MIGRATION" file exists in the migration directory, then skip it entirely
+                if (migrationFiles.includes('SKIP_MIGRATION')) { continue; }
+
                 const migrationFilesFiltered = migrationFiles.filter(filename => {
                     if (filename.endsWith('.sql')) {
                         // Must be of the format [order]-[comp/main]-[name].sql
