@@ -113,6 +113,10 @@ async function triggerUpdate() {
     console.log("\n\n");
 
     if (user_answers.run_migrations) {
+        // To mimic the production build process, we build assets before running migrations,
+        // so make sure that happens in case a migration uses a new asset
+        await rebuildNPM(selected_deployment, 'build', true);
+
         console.log(chalk.blue(`[DEPLOYER] Running migrations on ${selected_deployment.title}...`))
         const [migrateFailed, migrateLog] = await runDatabaseMigrations(selected_deployment, !selected_deployment.backup);
         if (migrateFailed) {

@@ -2,7 +2,7 @@ const path = require("path");
 const { spawn } = require('child_process');
 const chalk = require('chalk');
 
-async function rebuildNPM(selected_deployment, buildCmd) {
+async function rebuildNPM(selected_deployment, buildCmd, buildOnly = false) {
     if (!buildCmd) { buildCmd = selected_deployment.build_cmd; }
 
     let hasFailed = false;
@@ -48,18 +48,20 @@ async function rebuildNPM(selected_deployment, buildCmd) {
         });
     };
 
-    console.log("[NPM] Installing npm packages...");
-    npmLog += "\n[NPM] Installing npm packages...";
+    if (!buildOnly) {
+        console.log("[NPM] Installing npm packages...");
+        npmLog += "\n[NPM] Installing npm packages...";
 
-    await spawnNpm(process.env.NPM_PATH, ['ci']).catch((err) => {
-        console.error('[NPM] npm ci failed');
-        npmLog += '\n[NPM] npm ci failed';
-        console.error(err);
-        npmLog += `\n${err}`;
-        hasFailed = true;
-    });
+        await spawnNpm(process.env.NPM_PATH, ['ci']).catch((err) => {
+            console.error('[NPM] npm ci failed');
+            npmLog += '\n[NPM] npm ci failed';
+            console.error(err);
+            npmLog += `\n${err}`;
+            hasFailed = true;
+        });
+    }
 
-    if (!hasFailed) {
+    if (!hasFailed && !buildOnly) {
         console.log("[NPM] Pruning old npm packages...");
         npmLog += "\n[NPM] Pruning old npm packages...";
 
