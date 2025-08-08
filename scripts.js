@@ -118,7 +118,11 @@ async function triggerUpdate() {
         await rebuildNPM(selected_deployment, 'build', true);
 
         console.log(chalk.blue(`[DEPLOYER] Running migrations on ${selected_deployment.title}...`))
-        const [migrateFailed, migrateLog] = await runDatabaseMigrations(selected_deployment, !selected_deployment.backup);
+        const [migrateFailed, migrateLog] = await runDatabaseMigrations(
+            selected_deployment,
+            !selected_deployment.backup,
+            toDeployment.no_composer_dev || user_answers.npm_command === 'publish',
+        );
         if (migrateFailed) {
             console.error(chalk.red(`[DEPLOYER] Failed to run migrations on ${selected_deployment.title}`));
             return;
@@ -157,7 +161,11 @@ async function triggerMigrate() {
     }
 
     console.log(`Running migrations on ${selected_deployment.title}...`)
-    const [migrateFailed, migrateLog] = await runDatabaseMigrations(selected_deployment, !selected_deployment.backup);
+    const [migrateFailed, migrateLog] = await runDatabaseMigrations(
+        selected_deployment,
+        !selected_deployment.backup,
+        toDeployment.no_composer_dev || false,
+    );
 
     if (migrateFailed) {
         console.error(`Failed to run migrations on ${selected_deployment.title}`);

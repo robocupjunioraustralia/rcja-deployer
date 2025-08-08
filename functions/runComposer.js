@@ -1,14 +1,18 @@
 const path = require("path");
 const { spawn } = require('child_process');
 
-async function runComposer(selected_deployment) {
+async function runComposer(selected_deployment, noDev) {
     let hasFailed = false;
     let composerLog = '\n\n[COMPOSER] Running composer install...';
     console.log('[COMPOSER] Running composer install...');
 
     const spawnComposer = async () => {
         return new Promise((resolve, reject) => {
-            const composer = spawn(process.env.COMPOSER_PATH, ['install', '--no-dev', '--no-interaction', '--no-progress', '--optimize-autoloader'], {
+            const composerOpts = ['install', '--no-interaction', '--no-progress', '--optimize-autoloader'];
+            if (noDev) {
+                composerOpts.push('--no-dev');
+            }
+            const composer = spawn(process.env.COMPOSER_PATH, composerOpts, {
                 cwd: path.join(selected_deployment.path),
                 shell: true
             });

@@ -223,13 +223,13 @@ function isDeploymentVersionCompatible(minVersion, deploymentVersion) {
 }
 
 
-async function runDatabaseMigrations(selected_deployment, skipBackup) {
+async function runDatabaseMigrations(selected_deployment, skipBackup, no_composer_dev) {
     let hasFailed = false;
     let migrationLog = '';
     console.log('[MIGRATE] Ensuring composer dependencies are up to date...');
     migrationLog += '\n[MIGRATE] Ensuring composer dependencies are up to date...';
 
-    const [hasComposerFailed, composerLog] = await runComposer(selected_deployment);
+    const [hasComposerFailed, composerLog] = await runComposer(selected_deployment, no_composer_dev);
     migrationLog += composerLog;
     if (hasComposerFailed) {
         console.error('[MIGRATE] Error running composer install');

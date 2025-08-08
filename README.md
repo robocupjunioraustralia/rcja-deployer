@@ -24,7 +24,7 @@ The following software is required for the various functions of this tool to wor
 ### .env
 
 - The `.env` file contains sensitive information and should not be committed to the repository.
-- Copy the contents of `.env.example` to a new `.env`, then populate it with your own settings. 
+- Copy the contents of `.env.example` to a new `.env`, then populate it with your own settings.
 
 The following variables must be set for the deployment scripts to work.
 | Variable | Description |
@@ -62,6 +62,7 @@ The sample included is meant for a full deployment, for a development instance o
         "pull_cmd": "git fetch --all && git pull git status",
         "build_cmd": "build",
         "backup": true,
+        "no_composer_dev": true,
         "run_nightly": true,
         "branch_ref": "refs/heads/develop",
     }
@@ -79,6 +80,7 @@ Here's a quick explanation of each variable:
 | *pull_cmd | The command to use to pull latest changes from the repository |
 | *build_cmd | The npm script to build assets, "build" (dev) or "publish" (prod) |
 | backup | Whether or not to backup the database before running migrations |
+| no_composer_dev | True to include `--no-dev` in the composer install command |
 | run_nightly | Whether or not to run the nightly script on this deployment |
 | branch_ref | The git ref for confirming the branch sent from the the webhook |
 
