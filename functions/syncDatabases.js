@@ -1,7 +1,4 @@
 const mariadb = require('mariadb');
-const fs = require('fs');
-const path = require('path');
-const phpParser = require('php-parser');
 
 const { rebuildViews } = require('./rebuildViews');
 const { rebuildUsers } = require('./rebuildUsers');

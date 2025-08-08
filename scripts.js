@@ -1,14 +1,9 @@
 // Runner for command-line scripts
 
 const { exec } = require('child_process');
-const express = require("express");
-const bodyParser = require("body-parser");
-const morgan = require("morgan");
 const dotenv = require("dotenv");
 const path = require("path");
-const crypto = require('crypto');
 const fs = require('fs');
-const nodemailer = require('nodemailer');
 const inquirer = require('inquirer');
 const chalk = require('chalk');
 
@@ -16,10 +11,8 @@ const { rebuildViews } = require('./functions/rebuildViews');
 const { runSyncDatabases } = require('./functions/syncDatabases');
 const { anonymiseDatabase } = require('./functions/anonymiseDatabase');
 const { rebuildForeignKeys } = require('./functions/rebuildForeignKeys');
-const { createDatabaseBackup } = require('./functions/backup');
 const { runDatabaseMigrations } = require('./functions/migrate');
 const { rebuildUsers } = require('./functions/rebuildUsers');
-const { enableMaintenance, disableMaintenance } = require('./functions/maintenance');
 const { rebuildNPM } = require('./functions/rebuildNPM');
 
 dotenv.config();
@@ -121,7 +114,7 @@ async function triggerUpdate() {
         const [migrateFailed, migrateLog] = await runDatabaseMigrations(
             selected_deployment,
             !selected_deployment.backup,
-            toDeployment.no_composer_dev || user_answers.npm_command === 'publish',
+            selected_deployment.no_composer_dev || user_answers.npm_command === 'publish',
         );
         if (migrateFailed) {
             console.error(chalk.red(`[DEPLOYER] Failed to run migrations on ${selected_deployment.title}`));
