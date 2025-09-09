@@ -204,7 +204,7 @@ app.post('/deploy', async (req, res) => {
     const [migrateFailed, migrateLog] = await runDatabaseMigrations(
       selected_deployment,
       !selected_deployment.backup,
-      toDeployment.no_composer_dev || false
+      selected_deployment.no_composer_dev || false
     );
     console.log("[DEPLOY] Migration complete: ", migrateFailed ? "FAIL" : "SUCCESS");
     deployLog += migrateLog;
