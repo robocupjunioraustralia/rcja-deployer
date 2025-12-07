@@ -9,6 +9,7 @@ const chalk = require('chalk');
 
 const { rebuildViews } = require('./functions/rebuildViews');
 const { runSyncDatabases } = require('./functions/syncDatabases');
+const { runImportDatabases } = require('./functions/importDatabases');
 const { anonymiseDatabase } = require('./functions/anonymiseDatabase');
 const { rebuildForeignKeys } = require('./functions/rebuildForeignKeys');
 const { runDatabaseMigrations } = require('./functions/migrate');
@@ -17,12 +18,11 @@ const { rebuildNPM } = require('./functions/rebuildNPM');
 
 dotenv.config();
 
-// npm run update (deployment)
-//   Interactive script to update a deployment
-//
-//   params:
-//   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
-async function triggerUpdate() {
+/**
+ * Check that the deployer is up to date before proceeding
+ * @returns {Promise<boolean>} - true if up to date, or if the user chooses to continue anyway
+ */
+async function checkUpToDate() {
     const git_status = await new Promise((resolve, reject) => {
         exec('git fetch && git status', (error, stdout, stderr) => {
             if (error) {
@@ -44,24 +44,48 @@ async function triggerUpdate() {
         ]);
 
         if (!outdated_git_confirm.continue) {
-            return;
+            return false;
         }
     }
 
-    const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-    let selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
+    return true;
+}
 
-    // if deployment is not specified, set selected deployment to first deployment in deployments.json
-    if (process.argv[process.argv.indexOf('update') + 1] !== undefined) {
-        const deployment = process.argv[process.argv.indexOf('update') + 1];
-        const deployment_info = deployments_info[deployment];
+/**
+ * Retrieve deployment config for a given deployment name, or the first deployment if none is given
+ * @param {string} deploymentName - Name of the deployment to retrieve
+ * @returns {object|null} - Deployment config, or null if not found
+ */
+function getDeploymentConfig(deploymentName) {
+    const deployments = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
 
-        if (deployment_info) {
-            selected_deployment = deployment_info;
-        } else {
-            console.error(`Deployment ${deployment} not found in deployments.json`);
-            return;
-        }
+    if (deploymentName === undefined) {
+        return deployments[Object.keys(deployments)[0]];
+    }
+
+    const deploymentConfig = deployments[deploymentName];
+
+    if (!deploymentConfig) {
+        console.error(`Deployment ${deploymentName} not found in deployments.json`);
+        return null;
+    }
+
+    return deploymentConfig;
+}
+
+// npm run update (deployment)
+//   Interactive script to update a deployment
+//
+//   params:
+//   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
+async function triggerUpdate() {
+    if (!(await checkUpToDate())) {
+        return;
+    }
+
+    const selected_deployment = getDeploymentConfig(process.argv[process.argv.indexOf('update') + 1]);
+    if (!selected_deployment) {
+        return;
     }
 
     console.log(chalk.blue(`[DEPLOYER] Updating ${selected_deployment.title}...`));
@@ -129,6 +153,83 @@ async function triggerUpdate() {
 
     console.log(chalk.blue(`[DEPLOYER] Installing NPM dependencies and running ${user_answers.npm_command} script for ${selected_deployment.title}...`))
     await rebuildNPM(selected_deployment, user_answers.npm_command);
+}
+
+
+// npm run import (deployment)
+//   Interactive script to import databases to a deployment
+//   CAUTION: This will overwrite the target databases
+//
+//   params:
+//   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
+async function triggerImport() {
+    if (!(await checkUpToDate())) {
+        return;
+    }
+
+    const selected_deployment = getDeploymentConfig(process.argv[process.argv.indexOf('import') + 1]);
+    if (!selected_deployment) {
+        return;
+    }
+
+    console.log(chalk.blue(`[DEPLOYER] Import databases (${selected_deployment.title})`));
+    console.log(chalk.cyan(`[INFO] This tool allows you to restore your deployment's databases from a backup`));
+    console.log(chalk.cyan(`[INFO] Make sure each SQL dump file has the database prefix of '${selected_deployment.database_prefix}'`));
+    console.log("\n");
+
+    const { mainDBFile, compDBFile } = await inquirer.prompt([
+        {
+            type: 'input',
+            name: 'mainDBFile',
+            message: `Path to SQL dump for ${selected_deployment.database_prefix}_main:`,
+        },
+        {
+            type: 'input',
+            name: 'compDBFile',
+            message: `Path to SQL dump for ${selected_deployment.database_prefix}_comp:`,
+        }
+    ]);
+
+    /** Make sure the files exist */
+    if (!fs.existsSync(mainDBFile)) {
+        console.error(chalk.red(`[DEPLOYER] Main database SQL dump file does not exist: ${mainDBFile}`));
+        return;
+    }
+    if (!fs.existsSync(compDBFile)) {
+        console.error(chalk.red(`[DEPLOYER] Comp database SQL dump file does not exist: ${compDBFile}`));
+        return;
+    }
+
+    console.log("\n");
+    console.log(chalk.redBright(`[WARNING] This will delete all existing databases for this deployment`));
+    const importConfirmed = await inquirer.prompt([
+        {
+            type: 'input',
+            name: 'confirm',
+            message: `Are you sure you want to continue? Write 'delete' to confirm.`,
+        }
+    ]);
+
+    if (importConfirmed.confirm !== 'delete') {
+        console.log(chalk.yellow(`[DEPLOYER] Import cancelled.`));
+        return;
+    }
+
+    console.log("\n\n");
+
+    console.log(chalk.blue(`[DEPLOYER] Importing databases to ${selected_deployment.title}...`))
+    const [importFailed, importLog] = await runImportDatabases(
+        selected_deployment,
+        mainDBFile,
+        compDBFile
+    );
+    if (importFailed) {
+        console.error(chalk.red(`[DEPLOYER] Failed to import databases to ${selected_deployment.title}`));
+        return;
+    }
+
+    console.log(chalk.green(`\n\nDone!`));
+    console.log(chalk.cyan(`[INFO] If this is a development environment, you may wish to run 'npm run update' next`));
 }
 
 // npm run migrate (deployment)
@@ -319,6 +420,7 @@ async function triggerNPM() {
 
 module.exports = {
     update: triggerUpdate,
+    import: triggerImport,
     migrate: triggerMigrate,
     rebuildViews: triggerRebuildViews,
     anonymise: triggerAnonymise,

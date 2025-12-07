@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "update": "node scripts.js update",
+    "import": "node scripts.js import",
     "migrate": "node scripts.js migrate",
     "rebuildViews": "node scripts.js rebuildViews",
     "rebuildUsers": "node scripts.js rebuildUsers",

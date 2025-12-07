@@ -19,6 +19,8 @@ function writeLog(message, success, type) {
                 console.log(`${success ? 'Sync successful' : 'Error while syncing'}. See logs/${logName} for details.`);
             } else if (type == 'nightly') {
                 console.log(`${success ? 'Nightly script successful' : 'Error while running nightly script'}. See logs/${logName} for details.`);
+            } else if (type == 'import') {
+                console.log(`${success ? 'Import successful' : 'Error while importing'}. See logs/${logName} for details.`);
             }
         }
     });
@@ -28,10 +30,17 @@ function writeLog(message, success, type) {
         sendEmail(success ? 'Sync successful' : 'SYNC FAILED', message, logFile);
     } else if (type == 'nightly') {
         sendEmail(success ? 'Nightly script successful' : 'NIGHTLY SCRIPT FAILED', message, logFile);
+    } else if (type == 'import') {
+        sendEmail(success ? 'Import successful' : 'IMPORT FAILED', message, logFile);
     }
 }
 
 function sendEmail(subject, message, attachment) {
+    if (!process.env.SMTP_HOST) {
+        console.log('[DEPLOYER] SMTP not configured, skipping email sending');
+        return;
+    }
+
     const transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST,
         port: process.env.SMTP_PORT,
