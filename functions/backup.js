@@ -6,25 +6,31 @@ const { spawn } = require('child_process');
 
 function getDeploymentBackupDir(selected_deployment, makeIfMissing) {
     const backupFolder = path.join(__dirname, '../backups');
-    if (makeIfMissing && !fs.existsSync(backupFolder)) {
+    if (!fs.existsSync(backupFolder)) {
+        if (!makeIfMissing) {
+            return null;
+        }
         fs.mkdirSync(backupFolder);
     }
 
     const deploymentBackupFolder = path.join(backupFolder, selected_deployment.database_prefix);
-    if (makeIfMissing && !fs.existsSync(deploymentBackupFolder)) {
+    if (!fs.existsSync(deploymentBackupFolder)) {
+        if (!makeIfMissing) {
+            return null;
+        }
         fs.mkdirSync(deploymentBackupFolder);
     }
 
     return deploymentBackupFolder;
 }
 
-async function createDatabaseBackup(selected_deployment, join_comps = false) {
+async function createDatabaseBackup(selected_deployment, join_comps = false, suffix = "") {
     let hasFailed = false;
     let backupLog = '\n\n[BACKUP] Running database backup...';
     console.log('[BACKUP] Running database backup...')
 
     // Create backup folder with current date
-    const backupName = new Date().toISOString().replaceAll(':', '-').split('.')[0];
+    const backupName = new Date().toISOString().replaceAll(':', '-').split('.')[0] + suffix;
     const backupDir = path.join(getDeploymentBackupDir(selected_deployment, true), backupName);
     if (!fs.existsSync(backupDir)) {
         fs.mkdirSync(backupDir);

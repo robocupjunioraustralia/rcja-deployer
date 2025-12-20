@@ -271,7 +271,7 @@ app.post('/export/:deployment_id', canExport, async (req, res) => {
   console.log(`[DEPLOYER] Creating backup for ${selected_deployment.title}...`);
   let exportLog = `--- Creating backup for ${selected_deployment.title} ---\n`;
 
-  const { hasFailed: backupFailed, backupLog, backupName, backupFiles } = await createDatabaseBackup(selected_deployment, false);
+  const { hasFailed: backupFailed, backupLog, backupName, backupFiles } = await createDatabaseBackup(selected_deployment, false, "_export");
   exportLog += backupLog;
 
   console.log(`[DEPLOYER] Backup complete: `, backupFailed ? "FAIL" : "SUCCESS");
@@ -293,6 +293,9 @@ app.get('/export/:deployment_id/:backup_name', canExport, async (req, res) => {
   const selected_deployment = req.selected_deployment;
 
   const deploymentBackupDir = getDeploymentBackupDir(selected_deployment, false);
+  if (!deploymentBackupDir) {
+    return res.status(404).send(`No backups found for deployment "${selected_deployment.title}"`);
+  }
 
   let backupName = req.params.backup_name;
   if (backupName === "latest") {
@@ -307,7 +310,7 @@ app.get('/export/:deployment_id/:backup_name', canExport, async (req, res) => {
     backupName = existingBackups.sort().reverse()[0];
   }
 
-  const backupDir = path.join(getDeploymentBackupDir(selected_deployment, false), backupName);
+  const backupDir = path.join(deploymentBackupDir, backupName);
   if (!fs.existsSync(backupDir)) {
     return res.status(404).send(`Unable to find backup "${backupName}" for deployment "${selected_deployment.title}"`);
   }
@@ -395,6 +398,30 @@ function triggerSyncDatabases() {
   runSyncDatabases(fromDeployment, toDeployment);
 }
 
+function cleanupExports() {
+  const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
+  for (const deploymentKey in deployments_info) {
+    const deploymentBackupDir = getDeploymentBackupDir(deployments_info[deploymentKey], false);
+    if (!deploymentBackupDir) {
+      continue;
+    }
+
+    // An export always ends with _export
+    const existingExports = fs.readdirSync(deploymentBackupDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && d.name.endsWith('_export'))
+      .map((d) => ({ directory: d, stats: fs.statSync(path.join(deploymentBackupDir, d.name)) }))
+      .sort((a, b) => a.stats.mtimeMs - b.stats.mtimeMs); // oldest first
+
+    // Keep up the 5 most recent exports as long as they are less than 1 day old
+    while (existingExports.length > 5 || (Date.now() - existingExports[0].stats.mtimeMs) / (1000 * 60 * 60 * 24) > 1) {
+      const toDelete = existingExports.shift();
+      const deletePath = path.join(deploymentBackupDir, toDelete.directory.name);
+      console.log(`[CLEANUP] Deleting old export: ${deletePath}`);
+      fs.rmSync(deletePath, { recursive: true, force: true });
+    }
+  }
+}
+
 async function runPHPScript(filePath, cwd) {
   return new Promise((resolve, reject) => {
     const migrateCmd = spawn(process.env.PHP_PATH, [filePath], { cwd: cwd, shell: true });
@@ -470,10 +497,13 @@ async function triggerCMSNightly() {
 
 // Schedule jobs:
 // - triggerCMSNightly - every night at 12am
+// - cleanupExports - every night at 1am
 // - triggerSyncDatabases - every night at 2am
 const syncJob = new CronJob('0 0 2 * * *', triggerSyncDatabases);
+const cleanupJob = new CronJob('0 0 1 * * *', cleanupExports);
 const nightlyJob = new CronJob('0 0 0 * * *', triggerCMSNightly);
 syncJob.start();
+cleanupJob.start();
 nightlyJob.start();
 
 // Run the nightly script on startup

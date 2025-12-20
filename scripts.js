@@ -324,9 +324,15 @@ async function triggerImport() {
         }
     } else if (importSource === 'local-backup') {
         const deploymentBackupDir = getDeploymentBackupDir(selected_deployment, false);
-        const backupFiles = fs.readdirSync(deploymentBackupDir).filter(
-            (file) => fs.lstatSync(path.join(deploymentBackupDir, file)).isDirectory()
-        ).sort().reverse();
+        if (!deploymentBackupDir) {
+            console.error(chalk.red(`[DEPLOYER] No backups found for deployment "${selected_deployment.title}"`));
+            return;
+        }
+
+        const backupFiles = fs.readdirSync(deploymentBackupDir, { withFileTypes: true })
+            .filter((d) => d.isDirectory())
+            .sort()
+            .reverse();
 
         const selectedBackup = await inquirer.prompt([
             {
