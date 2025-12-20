@@ -14,11 +14,11 @@ const { writeLog } = require('./logging');
  * CAUTION: This will delete all existing databases for the deployment
  * The dump files should contain the CREATE DATABASE statements for each database that needs to be imported
  * @param {object} deployment - deployment config
- * @param {string} filePathMain - path to the main database dump file
- * @param {string} filePathComps - path to the comp databases dump file, should match the main dump so that migrations work correctly
+ * @param {string[]} filePathsMain - path(s) to the main database dump file(s)
+ * @param {string[]} filePathsComp - path(s) to the comp databases dump file(s), should match the main dump so that migrations work correctly
  * @returns {Promise<[boolean, string]>} - [importFailed, importLog]
  */
-async function importDatabases(deployment, filePathMain, filePathComps) {
+async function importDatabases(deployment, filePathsMain, filePathsComp) {
     let importLog = "";
     let importFailed = false;
     try {
@@ -116,8 +116,11 @@ async function importDatabases(deployment, filePathMain, filePathComps) {
         }
 
         // Must import the main DB first, as the comp DBs have foreign key links to it
-        await runSQLFile(filePathMain);
-        await runSQLFile(filePathComps);
+        for (const filePath of [...filePathsMain, ...filePathsComp]) {
+            console.log(`[IMPORT] Importing ${filePathMain}`);
+            importLog += `\n[IMPORT] Importing ${filePathMain}`;
+            await runSQLFile(filePath);
+        }
 
         console.log("[IMPORT] Finished importing databases")
         importLog += "\n[IMPORT] Finished importing databases"
@@ -135,18 +138,14 @@ async function importDatabases(deployment, filePathMain, filePathComps) {
     return [importFailed, importLog]
 }
 
-async function runImportDatabases(deployment, filePathMain, filePathComps) {
+async function runImportDatabases(deployment, filePathsMain, filePathsComp) {
     console.log(`[IMPORT] IMPORTING DATABASES TO ${deployment.title}`);
-    console.log(`[IMPORT] - Main: ${filePathMain}`);
-    console.log(`[IMPORT] - Comps: ${filePathComps}`);
     let importLog = `--- IMPORTING DATABASES TO ${deployment.title} ---`;
-    importLog += `\n[IMPORT] - Main: ${filePathMain}`;
-    importLog += `\n[IMPORT] - Comps: ${filePathComps}\n`;
 
     enableMaintenance(deployment);
     importLog += `\n[IMPORT] Started on ${new Date().toISOString()}\n\n`;
 
-    const [importFailed, newImportLog] = await importDatabases(deployment, filePathMain, filePathComps);
+    const [importFailed, newImportLog] = await importDatabases(deployment, filePathsMain, filePathsComp);
     importLog += newImportLog;
     importLog += `\n\n--- IMPORT: ${importFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
 

@@ -174,34 +174,102 @@ async function triggerImport() {
 
     console.log(chalk.blue(`[DEPLOYER] Import databases (${selected_deployment.title})`));
     console.log(chalk.cyan(`[INFO] This tool allows you to restore your deployment's databases from a backup`));
-    console.log(chalk.cyan(`[INFO] Make sure each SQL dump file has the database prefix of '${selected_deployment.database_prefix}'`));
-    console.log("\n");
+    console.log(" ");
 
-    const { mainDBFile, compDBFile } = await inquirer.prompt([
+    const { importSource } = await inquirer.prompt([
         {
-            type: 'input',
-            name: 'mainDBFile',
-            message: `Path to SQL dump for ${selected_deployment.database_prefix}_main:`,
-        },
-        {
-            type: 'input',
-            name: 'compDBFile',
-            message: `Path to SQL dump for ${selected_deployment.database_prefix}_comp:`,
+            type: 'rawlist',
+            name: 'importSource',
+            message: `Select the import source to use:`,
+            choices: [
+                { name: 'Local - Backup created by the deployer in ./backups', value: 'local-backup' },
+                { name: 'Local - SQL files on the local machine', value: 'local-sql' },
+            ],
         }
     ]);
 
-    /** Make sure the files exist */
-    if (!fs.existsSync(mainDBFile)) {
-        console.error(chalk.red(`[DEPLOYER] Main database SQL dump file does not exist: ${mainDBFile}`));
-        return;
+    const mainFiles = [];
+    const compFiles = [];
+
+    if (importSource === 'local-backup') {
+        const backupsPath = path.join(__dirname, 'backups');
+        if (!fs.existsSync(backupsPath)) {
+            console.error(chalk.red(`[DEPLOYER] No backups found in ./backups`));
+            return;
+        }
+
+        const backupFiles = fs.readdirSync(backupsPath).filter(
+            (file) => fs.lstatSync(path.join(__dirname, 'backups', file)).isDirectory()
+        ).sort().reverse();
+
+        const selectedBackup = await inquirer.prompt([
+            {
+                type: 'rawlist',
+                name: 'backupDir',
+                message: `Select a backup to import:`,
+                choices: backupFiles,
+            }
+        ]);
+
+        const backupDirPath = path.join(backupsPath, selectedBackup.backupDir);
+        for (const file of fs.readdirSync(backupDirPath)) {
+            if (!file.endsWith('.sql')) {
+                continue;
+            }
+
+            if (file.startsWith(`${selected_deployment.database_prefix}_main`)) {
+                mainFiles.push(path.join(backupDirPath, file));
+            }
+
+            if (file.startsWith(`${selected_deployment.database_prefix}_comp`)) {
+                compFiles.push(path.join(backupDirPath, file));
+            }
+        }
+    } else if (importSource === 'local-sql') {
+        console.log(" ");
+        console.log(chalk.yellow(`[INFO] Make sure each SQL dump file has the database prefix of '${selected_deployment.database_prefix}'`));
+
+        const answers = await inquirer.prompt([
+            {
+                type: 'input',
+                name: 'mainDBFile',
+                message: `Path to SQL dump for ${selected_deployment.database_prefix}_main:`,
+            },
+            {
+                type: 'input',
+                name: 'compDBFile',
+                message: `Path to SQL dump for ${selected_deployment.database_prefix}_comp:`,
+            }
+        ]);
+
+        mainFiles.push(answers.mainDBFile);
+        compFiles.push(answers.compDBFile);
     }
-    if (!fs.existsSync(compDBFile)) {
-        console.error(chalk.red(`[DEPLOYER] Comp database SQL dump file does not exist: ${compDBFile}`));
+
+    /** Make sure the files exist */
+    console.log(" ");
+    if (mainFiles.length === 0 && compFiles.length === 0) {
+        console.error(chalk.red(`[DEPLOYER] No database files found to import`));
         return;
     }
 
-    console.log("\n");
-    console.log(chalk.redBright(`[WARNING] This will delete all existing databases for this deployment`));
+    console.log(chalk.grey(`[DEPLOYER] Files to import:`));
+    let hasInvalidFiles = false;
+    [...mainFiles, ...compFiles].forEach((file) => {
+        if (!fs.existsSync(file)) {
+            console.error(chalk.red(` - Not Found: ${file}`));
+            hasInvalidFiles = true;
+            return;
+        }
+
+        console.log(chalk.grey(` - ${file}`));
+    });
+
+    if (hasInvalidFiles) {
+        return;
+    }
+
+    console.log(chalk.redBright(`\n[WARNING] This will delete all existing databases for this deployment`));
     const importConfirmed = await inquirer.prompt([
         {
             type: 'input',
@@ -211,11 +279,11 @@ async function triggerImport() {
     ]);
 
     if (importConfirmed.confirm !== 'delete') {
-        console.log(chalk.yellow(`[DEPLOYER] Import cancelled.`));
+        console.log(chalk.yellow(`\n[DEPLOYER] Import cancelled.`));
         return;
     }
 
-    console.log("\n\n");
+    console.log("\n");
 
     console.log(chalk.blue(`[DEPLOYER] Importing databases to ${selected_deployment.title}...`))
     const [importFailed, importLog] = await runImportDatabases(

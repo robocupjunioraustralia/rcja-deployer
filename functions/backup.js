@@ -4,21 +4,13 @@ const mysql = require('mysql');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
-async function createDatabaseBackup(selected_deployment) {
+async function createDatabaseBackup(selected_deployment, join_comps = false) {
     let hasFailed = false;
     let backupLog = '\n\n[BACKUP] Running database backup...';
     console.log('[BACKUP] Running database backup...')
 
     // Create backup folder with current date
-    const currentDate = new Date();
-    const day = currentDate.getDate().toString().padStart(2, '0');
-    const month = (currentDate.getMonth() + 1).toString().padStart(2, '0');
-    const year = currentDate.getFullYear().toString();
-    const hours = currentDate.getHours().toString().padStart(2, '0');
-    const minutes = currentDate.getMinutes().toString().padStart(2, '0');
-    const seconds = currentDate.getSeconds().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    const formattedDate = `${day}-${month}-${year}_${hours}-${minutes}-${seconds}-${ampm}`;
+    const formattedDate = new Date().toISOString().replaceAll(':', '-').split('.')[0];
 
     const backupFolder = path.join(__dirname, '../backups');
     if (!fs.existsSync(backupFolder)) {
@@ -30,30 +22,31 @@ async function createDatabaseBackup(selected_deployment) {
         fs.mkdirSync(backupDir);
     }
 
-    const createMySQLDump = async (database, writeStream) => {
+    const createMySQLDump = async (databases, label, writeStream) => {
         return new Promise((resolve, reject) => {
             const mysqldump = spawn(process.env.MYSQLDUMP_PATH, [
                 '-u',
                 process.env.DB_USER,
                 '-p' + process.env.DB_PASSWORD,
-                database,
+                '--databases',
+                ...databases,
             ], { shell: true });
             mysqldump.stdout.pipe(writeStream);
             mysqldump.on('exit', (code) => {
                 if (code === 0) {
-                    console.log(`[BACKUP] Backup created for ${database}`);
-                    backupLog += `\n[BACKUP] Backup created for ${database}`;
+                    console.log(`[BACKUP] Backup created for ${label}`);
+                    backupLog += `\n[BACKUP] Backup created for ${label}`;
                     resolve();
                 } else {
-                    console.error(`[BACKUP] Error creating database backup for ${database}`);
-                    backupLog += `\n[BACKUP] Error creating database backup for ${database}`;
+                    console.error(`[BACKUP] Error creating database backup for ${label}`);
+                    backupLog += `\n[BACKUP] Error creating database backup for ${label}`;
                     hasFailed = true;
                     reject();
                 }
             });
             mysqldump.on('error', (err) => {
-                console.error(`[BACKUP] Error creating database backup for ${database}`);
-                backupLog += `\n[BACKUP] Error creating database backup for ${database}`;
+                console.error(`[BACKUP] Error creating database backup for ${label}`);
+                backupLog += `\n[BACKUP] Error creating database backup for ${label}`;
                 hasFailed = true;
                 reject(err);
             });
@@ -64,18 +57,6 @@ async function createDatabaseBackup(selected_deployment) {
             });
         });
     }
-
-    // Backup rcj_cms_main database
-    const mainDbBackupName = `backup_${selected_deployment.database_prefix}_main.sql`;
-    const mainDbBackupFile = path.join(backupDir, mainDbBackupName);
-    const mainDbWstream = fs.createWriteStream(mainDbBackupFile);
-
-    await createMySQLDump(`${selected_deployment.database_prefix}_main`, mainDbWstream).catch((err) => {
-        console.error(`[BACKUP] Error creating database backup for ${selected_deployment.database_prefix}_main`);
-        backupLog += `\n[BACKUP] Error creating database backup for ${selected_deployment.database_prefix}_main`;
-        hasFailed = true;
-    });
-    if (hasFailed) { return [hasFailed, backupLog]; }
 
     // Backup comp databases
     const connectionMain = mysql.createConnection({
@@ -110,28 +91,73 @@ async function createDatabaseBackup(selected_deployment) {
 
     connectionMain.end();
 
-    // For each uid, create a backup of the corresponding database
-    for (const comp of allComps) {
-        const uid = comp.uid;
+    const backupFiles = [];
 
-        const dbName = `${selected_deployment.database_prefix}_comp_${uid}`;
-        const backupName = `backup_${dbName}.sql`;
-        const backupFile = path.join(backupDir, backupName);
-        const wstream = fs.createWriteStream(backupFile);
+    // Backup rcj_cms_main database
+    const mainDbBackupName = `${selected_deployment.database_prefix}_main.sql`;
+    const mainDbBackupFile = path.join(backupDir, mainDbBackupName);
+    const mainDbWstream = fs.createWriteStream(mainDbBackupFile);
 
-        await createMySQLDump(dbName, wstream).catch((err) => {
-            console.error(`[BACKUP] Error creating database backup for ${dbName}`);
-            backupLog += `\n[BACKUP] Error creating database backup for ${dbName}`;
+    backupFiles.push(mainDbBackupFile);
+
+    await createMySQLDump(
+        [`${selected_deployment.database_prefix}_main`],
+        `${selected_deployment.database_prefix}_main`,
+        mainDbWstream
+    ).catch((err) => {
+        console.error(`[BACKUP] Error creating database backup for ${selected_deployment.database_prefix}_main:`, err);
+        backupLog += `\n[BACKUP] Error creating database backup for ${selected_deployment.database_prefix}_main: ${err}`;
+        hasFailed = true;
+    });
+    mainDbWstream.close();
+    if (hasFailed) { return [hasFailed, backupLog]; }
+
+    if (join_comps) {
+        // Backup all comp databases into a single file
+        const compDbsBackupName = `${selected_deployment.database_prefix}_comp.sql`;
+        const compDbsBackupFile = path.join(backupDir, compDbsBackupName);
+        const compDbsWstream = fs.createWriteStream(compDbsBackupFile);
+
+        backupFiles.push(compDbsBackupFile);
+
+        await createMySQLDump(
+            allComps.map(comp => `${selected_deployment.database_prefix}_comp_${comp.uid}`),
+            `${selected_deployment.database_prefix}_comp_*`,
+            compDbsWstream
+        ).catch((err) => {
+            console.error(`[BACKUP] Error creating database backup for ${selected_deployment.database_prefix}_comp_*`, err);
+            backupLog += `\n[BACKUP] Error creating database backup for ${selected_deployment.database_prefix}_comp_*: ${err}`;
             hasFailed = true;
         });
+        compDbsWstream.close();
         if (hasFailed) { return [hasFailed, backupLog]; }
-    };
+    } else {
+        // For each uid, create a backup of the corresponding database
+        for (const comp of allComps) {
+            const uid = comp.uid;
+
+            const dbName = `${selected_deployment.database_prefix}_comp_${uid}`;
+            const backupName = `backup_${dbName}.sql`;
+            const backupFile = path.join(backupDir, backupName);
+            const wstream = fs.createWriteStream(backupFile);
+
+            backupFiles.push(backupFile);
+
+            await createMySQLDump(dbName, wstream).catch((err) => {
+                console.error(`[BACKUP] Error creating database backup for ${dbName}`, err);
+                backupLog += `\n[BACKUP] Error creating database backup for ${dbName}: ${err}`;
+                hasFailed = true;
+            });
+            wstream.close();
+            if (hasFailed) { return [hasFailed, backupLog]; }
+        };
+    }
 
     console.log('[BACKUP] Database backup complete');
     backupLog += '\n[BACKUP] Database backup complete\n';
-    return [hasFailed, backupLog];
+    return [hasFailed, backupLog, backupFiles];
 }
 
 module.exports = {
-    createDatabaseBackup
+    createDatabaseBackup,
 };
