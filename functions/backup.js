@@ -4,20 +4,28 @@ const mysql = require('mysql');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
+function getDeploymentBackupDir(selected_deployment, makeIfMissing) {
+    const backupFolder = path.join(__dirname, '../backups');
+    if (makeIfMissing && !fs.existsSync(backupFolder)) {
+        fs.mkdirSync(backupFolder);
+    }
+
+    const deploymentBackupFolder = path.join(backupFolder, selected_deployment.database_prefix);
+    if (makeIfMissing && !fs.existsSync(deploymentBackupFolder)) {
+        fs.mkdirSync(deploymentBackupFolder);
+    }
+
+    return deploymentBackupFolder;
+}
+
 async function createDatabaseBackup(selected_deployment, join_comps = false) {
     let hasFailed = false;
     let backupLog = '\n\n[BACKUP] Running database backup...';
     console.log('[BACKUP] Running database backup...')
 
     // Create backup folder with current date
-    const formattedDate = new Date().toISOString().replaceAll(':', '-').split('.')[0];
-
-    const backupFolder = path.join(__dirname, '../backups');
-    if (!fs.existsSync(backupFolder)) {
-        fs.mkdirSync(backupFolder);
-    }
-
-    const backupDir = path.join(__dirname, `../backups/${selected_deployment.database_prefix}_${formattedDate}`);
+    const backupName = new Date().toISOString().replaceAll(':', '-').split('.')[0];
+    const backupDir = path.join(getDeploymentBackupDir(selected_deployment, true), backupName);
     if (!fs.existsSync(backupDir)) {
         fs.mkdirSync(backupDir);
     }
@@ -38,15 +46,15 @@ async function createDatabaseBackup(selected_deployment, join_comps = false) {
                     backupLog += `\n[BACKUP] Backup created for ${label}`;
                     resolve();
                 } else {
-                    console.error(`[BACKUP] Error creating database backup for ${label}`);
-                    backupLog += `\n[BACKUP] Error creating database backup for ${label}`;
+                    console.error(`[BACKUP] Error creating database backup for ${label}: ${code}`);
+                    backupLog += `\n[BACKUP] Error creating database backup for ${label}: ${code}`;
                     hasFailed = true;
                     reject();
                 }
             });
             mysqldump.on('error', (err) => {
-                console.error(`[BACKUP] Error creating database backup for ${label}`);
-                backupLog += `\n[BACKUP] Error creating database backup for ${label}`;
+                console.error(`[BACKUP] Error creating database backup for ${label}:`, err);
+                backupLog += `\n[BACKUP] Error creating database backup for ${label}: ${err}`;
                 hasFailed = true;
                 reject(err);
             });
@@ -76,7 +84,7 @@ async function createDatabaseBackup(selected_deployment, join_comps = false) {
         hasFailed = true;
         connectionMain.end();
     });
-    if (hasFailed) { return [hasFailed, backupLog]; }
+    if (hasFailed) { return { hasFailed, backupLog, backupName, backupDir, backupFiles }; }
     console.log(`[BACKUP] Successfully connected to database ${selected_deployment.database_prefix}_main`);
     backupLog += `\n[BACKUP] Successfully connected to database ${selected_deployment.database_prefix}_main`;
 
@@ -87,7 +95,7 @@ async function createDatabaseBackup(selected_deployment, join_comps = false) {
         hasFailed = true;
         connectionMain.end();
     });
-    if (hasFailed) { return [hasFailed, backupLog]; }
+    if (hasFailed) { return { hasFailed, backupLog, backupDir, backupFiles }; }
 
     connectionMain.end();
 
@@ -110,7 +118,7 @@ async function createDatabaseBackup(selected_deployment, join_comps = false) {
         hasFailed = true;
     });
     mainDbWstream.close();
-    if (hasFailed) { return [hasFailed, backupLog]; }
+    if (hasFailed) { return { hasFailed, backupLog, backupName, backupDir, backupFiles }; }
 
     if (join_comps) {
         // Backup all comp databases into a single file
@@ -130,34 +138,35 @@ async function createDatabaseBackup(selected_deployment, join_comps = false) {
             hasFailed = true;
         });
         compDbsWstream.close();
-        if (hasFailed) { return [hasFailed, backupLog]; }
+        if (hasFailed) { return { hasFailed, backupLog, backupName, backupDir, backupFiles }; }
     } else {
         // For each uid, create a backup of the corresponding database
         for (const comp of allComps) {
             const uid = comp.uid;
 
             const dbName = `${selected_deployment.database_prefix}_comp_${uid}`;
-            const backupName = `backup_${dbName}.sql`;
+            const backupName = `${dbName}.sql`;
             const backupFile = path.join(backupDir, backupName);
             const wstream = fs.createWriteStream(backupFile);
 
             backupFiles.push(backupFile);
 
-            await createMySQLDump(dbName, wstream).catch((err) => {
+            await createMySQLDump([dbName], dbName, wstream).catch((err) => {
                 console.error(`[BACKUP] Error creating database backup for ${dbName}`, err);
                 backupLog += `\n[BACKUP] Error creating database backup for ${dbName}: ${err}`;
                 hasFailed = true;
             });
             wstream.close();
-            if (hasFailed) { return [hasFailed, backupLog]; }
+            if (hasFailed) { return { hasFailed, backupLog, backupName, backupDir, backupFiles }; }
         };
     }
 
     console.log('[BACKUP] Database backup complete');
     backupLog += '\n[BACKUP] Database backup complete\n';
-    return [hasFailed, backupLog, backupFiles];
+    return { hasFailed, backupLog, backupName, backupDir, backupFiles };
 }
 
 module.exports = {
     createDatabaseBackup,
+    getDeploymentBackupDir,
 };

@@ -21,6 +21,8 @@ function writeLog(message, success, type) {
                 console.log(`${success ? 'Nightly script successful' : 'Error while running nightly script'}. See logs/${logName} for details.`);
             } else if (type == 'import') {
                 console.log(`${success ? 'Import successful' : 'Error while importing'}. See logs/${logName} for details.`);
+            } else if (type == 'export') {
+                console.log(`${success ? 'Export successful' : 'Error while exporting'}. See logs/${logName} for details.`);
             }
         }
     });
@@ -32,6 +34,8 @@ function writeLog(message, success, type) {
         sendEmail(success ? 'Nightly script successful' : 'NIGHTLY SCRIPT FAILED', message, logFile);
     } else if (type == 'import') {
         sendEmail(success ? 'Import successful' : 'IMPORT FAILED', message, logFile);
+    } else if (type == 'export') {
+        sendEmail(success ? 'Export successful' : 'EXPORT FAILED', message, logFile);
     }
 }
 

@@ -117,8 +117,8 @@ async function importDatabases(deployment, filePathsMain, filePathsComp) {
 
         // Must import the main DB first, as the comp DBs have foreign key links to it
         for (const filePath of [...filePathsMain, ...filePathsComp]) {
-            console.log(`[IMPORT] Importing ${filePathMain}`);
-            importLog += `\n[IMPORT] Importing ${filePathMain}`;
+            console.log(`[IMPORT] Importing ${filePath}`);
+            importLog += `\n[IMPORT] Importing ${filePath}`;
             await runSQLFile(filePath);
         }
 

@@ -8,6 +8,8 @@ const dotenv = require("dotenv");
 const path = require("path");
 const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
+const archiver = require('archiver');
 const { spawn } = require('child_process');
 const CronJob = require('cron').CronJob;
 
@@ -17,6 +19,7 @@ const { enableMaintenance, disableMaintenance } = require('./functions/maintenan
 const { writeLog } = require('./functions/logging');
 const { rebuildViews } = require('./functions/rebuildViews');
 const { rebuildNPM } = require('./functions/rebuildNPM');
+const { createDatabaseBackup, getDeploymentBackupDir } = require("./functions/backup");
 
 dotenv.config();
 
@@ -233,6 +236,148 @@ app.post('/deploy', async (req, res) => {
     res.status(200).send('OK');
     disableMaintenance(selected_deployment);
   });
+});
+
+async function canExport(req, res, next) {
+  const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
+  const selected_deployment = deployments_info[req.params.deployment_id] ?? null;
+  if (!selected_deployment) {
+    return res.sendStatus(403);
+  }
+
+  if (!selected_deployment.export) {
+    return res.sendStatus(403); // Exporting not enabled for this deployment
+  }
+
+  const requestIp = req.ip.replace('::ffff:', '');
+  if (!selected_deployment.export.allowed_ips.includes(requestIp)) {
+    console.log(`[EXPORT] Request from IP "${requestIp}" not allowed for deployment "${selected_deployment.title}"`);
+    return res.sendStatus(403);
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || authHeader.split(" ")[1] !== selected_deployment.export.secret) {
+    console.log(`[EXPORT] Invalid secret for deployment "${selected_deployment.title}" from IP "${req.ip}"`);
+    return res.sendStatus(403);
+  }
+
+  req.selected_deployment = selected_deployment;
+  next();
+}
+
+app.post('/export/:deployment_id', canExport, async (req, res) => {
+  const selected_deployment = req.selected_deployment;
+
+  console.log(`[DEPLOYER] Creating backup for ${selected_deployment.title}...`);
+  let exportLog = `--- Creating backup for ${selected_deployment.title} ---\n`;
+
+  const { hasFailed: backupFailed, backupLog, backupName, backupFiles } = await createDatabaseBackup(selected_deployment, false);
+  exportLog += backupLog;
+
+  console.log(`[DEPLOYER] Backup complete: `, backupFailed ? "FAIL" : "SUCCESS");
+  exportLog += `\n--- BACKUP COMPLETE: ${backupFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
+
+  if (backupFailed) {
+    res.status(500).setHeader('Content-Type', 'text/plain');
+    res.write(exportLog);
+    res.end();
+    return;
+  }
+
+  res.status(200).setHeader('Content-Type', 'application/json');
+  res.write(JSON.stringify({ name: backupName, files: backupFiles }));
+  res.end();
+});
+
+app.get('/export/:deployment_id/:backup_name', canExport, async (req, res) => {
+  const selected_deployment = req.selected_deployment;
+
+  const deploymentBackupDir = getDeploymentBackupDir(selected_deployment, false);
+
+  let backupName = req.params.backup_name;
+  if (backupName === "latest") {
+    const existingBackups = fs.readdirSync(deploymentBackupDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+
+    if (existingBackups.length === 0) {
+      return res.status(404).send(`No backups found for deployment "${selected_deployment.title}"`);
+    }
+
+    backupName = existingBackups.sort().reverse()[0];
+  }
+
+  const backupDir = path.join(getDeploymentBackupDir(selected_deployment, false), backupName);
+  if (!fs.existsSync(backupDir)) {
+    return res.status(404).send(`Unable to find backup "${backupName}" for deployment "${selected_deployment.title}"`);
+  }
+
+  const backupFiles = fs.readdirSync(backupDir)
+    .filter((f) => f.endsWith('.sql'))
+    .map((f) => path.join(backupDir, f));
+
+  // Attempt to zip the files
+  console.log(`[EXPORT] Creating zip of backup ${backupName}...`);
+  let exportLog = `[EXPORT] Creating zip of backup ${backupName}...\n`;
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rcja-deployer-export-'));
+  const zipName = `${selected_deployment.database_prefix}_${backupName}_backup.zip`;
+  const zipPath = path.join(tempDir, zipName);
+  const output = fs.createWriteStream(zipPath);
+
+  const archive = archiver('zip');
+  archive.pipe(output);
+
+  for (const filePath of backupFiles) {
+    const fileName = path.basename(filePath);
+    console.log(`[EXPORT] Adding file to zip: ${filePath}`);
+    exportLog += `[EXPORT] Adding file to zip: ${fileName}\n`;
+
+    archive.file(filePath, { name: fileName });
+  }
+
+  archive.finalize();
+
+  try {
+    await new Promise((resolve, reject) => {
+      output.on('close', resolve);
+      archive.on('error', reject);
+    });
+  } catch (err) {
+    console.error('[EXPORT] Error creating zip file:', err?.message || err);
+    exportLog += `\n[EXPORT] Error creating zip file: ${err?.message || err}`;
+
+    res.status(500).setHeader('Content-Type', 'text/plain');
+    res.write(exportLog);
+    res.end();
+    return;
+  }
+
+  console.log(`[EXPORT] Created zip: ${zipPath}`);
+  exportLog += `[EXPORT] Created zip: ${zipPath}\n`;
+
+  res.attachment(zipName);
+  try {
+    await new Promise((resolve, reject) => {
+      res.sendFile(zipPath, (err) => {
+        if (err) { return reject(err); }
+        resolve();
+      });
+    });
+  } catch (err) {
+    console.error('[EXPORT] Error sending zip file:', err?.message || err);
+    exportLog += `\n[EXPORT] Error sending zip file: ${err?.message || err}`;
+
+    res.status(500).end();
+    writeLog(exportLog, false, "export");
+    return;
+  }
+
+  console.log(`[EXPORT] Export complete`);
+  exportLog += `[EXPORT] Export complete\n`;
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+  writeLog(exportLog, true, "export");
 });
 
 if (process.env.SENTRY_DSN) {

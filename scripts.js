@@ -4,8 +4,12 @@ const { exec } = require('child_process');
 const dotenv = require("dotenv");
 const path = require("path");
 const fs = require('fs');
+const os = require('os');
 const inquirer = require('inquirer');
+const unzipper = require('unzipper');
 const chalk = require('chalk');
+const { Readable } = require('stream');
+const { finished } = require('stream/promises');
 
 const { rebuildViews } = require('./functions/rebuildViews');
 const { runSyncDatabases } = require('./functions/syncDatabases');
@@ -15,6 +19,7 @@ const { rebuildForeignKeys } = require('./functions/rebuildForeignKeys');
 const { runDatabaseMigrations } = require('./functions/migrate');
 const { rebuildUsers } = require('./functions/rebuildUsers');
 const { rebuildNPM } = require('./functions/rebuildNPM');
+const { getDeploymentBackupDir } = require("./functions/backup");
 
 dotenv.config();
 
@@ -172,6 +177,25 @@ async function triggerImport() {
         return;
     }
 
+    let hasConfirmed = false;
+    async function promptContinue() {
+        if (hasConfirmed) {
+            return true;
+        }
+
+        console.log(chalk.redBright(`\n[WARNING] This will delete all existing local databases for this deployment`));
+        const importConfirmed = await inquirer.prompt([
+            {
+                type: 'input',
+                name: 'confirm',
+                message: `Are you sure you want to continue? Write 'delete' to confirm.`,
+            }
+        ]);
+
+        hasConfirmed = importConfirmed.confirm === 'delete';
+        return hasConfirmed;
+    }
+
     console.log(chalk.blue(`[DEPLOYER] Import databases (${selected_deployment.title})`));
     console.log(chalk.cyan(`[INFO] This tool allows you to restore your deployment's databases from a backup`));
     console.log(" ");
@@ -182,8 +206,9 @@ async function triggerImport() {
             name: 'importSource',
             message: `Select the import source to use:`,
             choices: [
-                { name: 'Local - Backup created by the deployer in ./backups', value: 'local-backup' },
+                { name: `Local - Backup created by the deployer in ./backups/${selected_deployment.database_prefix}`, value: 'local-backup' },
                 { name: 'Local - SQL files on the local machine', value: 'local-sql' },
+                { name: 'Remote - Import a backup from a remote deployment', value: 'remote' },
             ],
         }
     ]);
@@ -191,15 +216,116 @@ async function triggerImport() {
     const mainFiles = [];
     const compFiles = [];
 
-    if (importSource === 'local-backup') {
-        const backupsPath = path.join(__dirname, 'backups');
-        if (!fs.existsSync(backupsPath)) {
-            console.error(chalk.red(`[DEPLOYER] No backups found in ./backups`));
+    if (importSource === 'remote') {
+
+        if (!selected_deployment.import) {
+            console.error(chalk.red(`\n[DEPLOYER] Remote import is not configured in deployments.json for ${selected_deployment.title}`));
             return;
         }
 
-        const backupFiles = fs.readdirSync(backupsPath).filter(
-            (file) => fs.lstatSync(path.join(__dirname, 'backups', file)).isDirectory()
+        const { remoteImportSource } = await inquirer.prompt([
+            {
+                type: 'rawlist',
+                name: 'remoteImportSource',
+                message: 'Select a method to retrieve the remote backup:',
+                choices: [
+                    { name: 'Latest - The latest existing backup on the remote deployment', value: 'latest' },
+                    { name: 'Custom - Provide the name of a specific backup on the remote deployment', value: 'custom' },
+                    { name: 'New - Trigger a new backup on the remote deployment and import it', value: 'new' },
+                ],
+            }
+        ]);
+
+        let backupName = null;
+        if (remoteImportSource === 'latest') {
+            backupName = 'latest';
+        } else if (remoteImportSource === 'custom') {
+            const { customBackupName } = await inquirer.prompt([
+                {
+                    type: 'input',
+                    name: 'customBackupName',
+                    message: 'Enter the name of the backup to import:',
+                }
+            ]);
+            backupName = customBackupName;
+        }
+
+        if (!(await promptContinue())) {
+            console.log(chalk.yellow(`\n[DEPLOYER] Import cancelled.`));
+            return;
+        }
+
+        const remoteUrlBase = `${selected_deployment.import.remote_host}/export/${selected_deployment.import.deployment}`;
+        const remoteHeaders = {
+            'Authorization': `Bearer ${selected_deployment.import.secret}`
+        };
+
+        if (backupName === null) {
+            // Create a new backup on the remote deployment
+            console.log(`\n[DEPLOYER] Creating new backup on ${remoteUrlBase}...`);
+
+            const backupResponse = await fetch(remoteUrlBase, { method: 'POST', headers: remoteHeaders });
+            if (!backupResponse.ok) {
+                console.error(chalk.red(`[DEPLOYER] Failed to create new backup on remote: ${backupResponse.status} ${backupResponse.statusText}`));
+                console.error(await backupResponse.text());
+                return;
+            }
+
+            const backupData = await backupResponse.json();
+            backupName = backupData.name;
+        }
+
+        console.log(`\n[DEPLOYER] Retrieving backup "${backupName}" from ${remoteUrlBase}...`);
+
+        const exportResponse = await fetch(`${remoteUrlBase}/${backupName}`, { headers: remoteHeaders });
+        if (!exportResponse.ok) {
+            console.error(chalk.red(`[DEPLOYER] Failed to download backup from remote: ${exportResponse.status} ${exportResponse.statusText}`));
+            console.error(await exportResponse.text());
+            return;
+        }
+
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rcja-deployer-import-'));
+        const zipPath = path.join(tempDir, `${selected_deployment.database_prefix}_backup.zip`);
+        const fileStream = fs.createWriteStream(zipPath);
+
+        await finished(Readable.fromWeb(exportResponse.body).pipe(fileStream));
+
+
+        console.log(`[DEPLOYER] Downloaded backup to ${zipPath}`);
+
+        const formattedDate = new Date().toISOString().replaceAll(':', '-').split('.')[0];
+
+        const backupDir = path.join(
+            getDeploymentBackupDir(selected_deployment, true),
+            `${formattedDate}_remote`
+        );
+        if (!fs.existsSync(backupDir)) {
+            fs.mkdirSync(backupDir);
+        }
+
+        await fs.createReadStream(zipPath)
+            .pipe(unzipper.Extract({ path: backupDir }))
+            .promise();
+
+        console.log(`[DEPLOYER] Extracted backup to ${backupDir}`);
+
+        for (const file of fs.readdirSync(backupDir)) {
+            if (!file.endsWith('.sql')) {
+                continue;
+            }
+
+            if (file.startsWith(`${selected_deployment.database_prefix}_main`)) {
+                mainFiles.push(path.join(backupDir, file));
+            }
+
+            if (file.startsWith(`${selected_deployment.database_prefix}_comp`)) {
+                compFiles.push(path.join(backupDir, file));
+            }
+        }
+    } else if (importSource === 'local-backup') {
+        const deploymentBackupDir = getDeploymentBackupDir(selected_deployment, false);
+        const backupFiles = fs.readdirSync(deploymentBackupDir).filter(
+            (file) => fs.lstatSync(path.join(deploymentBackupDir, file)).isDirectory()
         ).sort().reverse();
 
         const selectedBackup = await inquirer.prompt([
@@ -269,16 +395,7 @@ async function triggerImport() {
         return;
     }
 
-    console.log(chalk.redBright(`\n[WARNING] This will delete all existing databases for this deployment`));
-    const importConfirmed = await inquirer.prompt([
-        {
-            type: 'input',
-            name: 'confirm',
-            message: `Are you sure you want to continue? Write 'delete' to confirm.`,
-        }
-    ]);
-
-    if (importConfirmed.confirm !== 'delete') {
+    if (!(await promptContinue())) {
         console.log(chalk.yellow(`\n[DEPLOYER] Import cancelled.`));
         return;
     }
@@ -286,11 +403,7 @@ async function triggerImport() {
     console.log("\n");
 
     console.log(chalk.blue(`[DEPLOYER] Importing databases to ${selected_deployment.title}...`))
-    const [importFailed, importLog] = await runImportDatabases(
-        selected_deployment,
-        mainDBFile,
-        compDBFile
-    );
+    const [importFailed, importLog] = await runImportDatabases(selected_deployment, mainFiles, compFiles);
     if (importFailed) {
         console.error(chalk.red(`[DEPLOYER] Failed to import databases to ${selected_deployment.title}`));
         return;

@@ -464,7 +464,7 @@ async function runDatabaseMigrations(selected_deployment, skipBackup, no_compose
 
     // Create a full backup before proceeding with any migration
     if (!skipBackup) {
-        const [hasBackupFailed, backupLog] = await createDatabaseBackup(selected_deployment);
+        const { hasFailed: hasBackupFailed, backupLog } = await createDatabaseBackup(selected_deployment);
         migrationLog += backupLog;
         if (hasBackupFailed) {
             console.error('[MIGRATE] Error creating full backup before running migrations');
