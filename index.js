@@ -265,11 +265,41 @@ async function canExport(req, res, next) {
   next();
 }
 
+function cleanupExports() {
+  const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
+  for (const deploymentKey in deployments_info) {
+    const deploymentBackupDir = getDeploymentBackupDir(deployments_info[deploymentKey], false);
+    if (!deploymentBackupDir) {
+      continue;
+    }
+
+    // An export always ends with _export
+    const existingExports = fs.readdirSync(deploymentBackupDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && d.name.endsWith('_export'))
+      .map((d) => ({ directory: d, stats: fs.statSync(path.join(deploymentBackupDir, d.name)) }))
+      .sort((a, b) => a.stats.mtimeMs - b.stats.mtimeMs); // oldest first
+
+    if (existingExports.length === 0) {
+      continue;
+    }
+
+    // Keep up the 5 most recent exports as long as they are less than 1 day old
+    while (existingExports.length > 5 || (Date.now() - existingExports[0].stats.mtimeMs) / (1000 * 60 * 60 * 24) > 1) {
+      const toDelete = existingExports.shift();
+      const deletePath = path.join(deploymentBackupDir, toDelete.directory.name);
+      console.log(`[CLEANUP] Deleting old export: ${deletePath}`);
+      fs.rmSync(deletePath, { recursive: true, force: true });
+    }
+  }
+}
+
 app.post('/export/:deployment_id', canExport, async (req, res) => {
   const selected_deployment = req.selected_deployment;
 
   console.log(`[DEPLOYER] Creating backup for ${selected_deployment.title}...`);
   let exportLog = `--- Creating backup for ${selected_deployment.title} ---\n`;
+
+  cleanupExports();
 
   const { hasFailed: backupFailed, backupLog, backupName, backupFiles } = await createDatabaseBackup(selected_deployment, false, "_export");
   exportLog += backupLog;
@@ -396,30 +426,6 @@ function triggerSyncDatabases() {
   const fromDeployment = deployments_info[process.env.SYNC_FROM_DEPLOYMENT];
   const toDeployment = deployments_info[process.env.SYNC_TO_DEPLOYMENT];
   runSyncDatabases(fromDeployment, toDeployment);
-}
-
-function cleanupExports() {
-  const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-  for (const deploymentKey in deployments_info) {
-    const deploymentBackupDir = getDeploymentBackupDir(deployments_info[deploymentKey], false);
-    if (!deploymentBackupDir) {
-      continue;
-    }
-
-    // An export always ends with _export
-    const existingExports = fs.readdirSync(deploymentBackupDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory() && d.name.endsWith('_export'))
-      .map((d) => ({ directory: d, stats: fs.statSync(path.join(deploymentBackupDir, d.name)) }))
-      .sort((a, b) => a.stats.mtimeMs - b.stats.mtimeMs); // oldest first
-
-    // Keep up the 5 most recent exports as long as they are less than 1 day old
-    while (existingExports.length > 5 || (Date.now() - existingExports[0].stats.mtimeMs) / (1000 * 60 * 60 * 24) > 1) {
-      const toDelete = existingExports.shift();
-      const deletePath = path.join(deploymentBackupDir, toDelete.directory.name);
-      console.log(`[CLEANUP] Deleting old export: ${deletePath}`);
-      fs.rmSync(deletePath, { recursive: true, force: true });
-    }
-  }
 }
 
 async function runPHPScript(filePath, cwd) {
