@@ -5,7 +5,7 @@ const { rebuildUsers } = require('./rebuildUsers');
 const { rebuildForeignKeys } = require('./rebuildForeignKeys');
 const { anonymiseDatabase } = require('./anonymiseDatabase');
 const { runDatabaseMigrations } = require('./migrate');
-const { enableMaintenance, disableMaintenance } = require('./maintenance');
+const { setMaintenanceMode } = require('./docker');
 const { writeLog } = require('./logging');
 
 // This function syncronises the databases between the production and staging servers
@@ -136,7 +136,7 @@ async function runSyncDatabases(fromDeployment, toDeployment) {
     console.log(`[SYNC] Syncing ${fromDeployment.title} to ${toDeployment.title}...`);
     let syncLog = `--- SYNCING ${fromDeployment.title} TO ${toDeployment.title} ---\n`;
 
-    enableMaintenance(toDeployment);
+    setMaintenanceMode(toDeployment, true);
     syncLog += `\n[SYNC] Started on ${new Date().toISOString()}\n\n`;
 
     const [syncFailed, newSyncLog] = await syncDatabases(fromDeployment, toDeployment);
@@ -219,7 +219,7 @@ async function runSyncDatabases(fromDeployment, toDeployment) {
     syncLog += `\n[SYNC] Finished on ${new Date().toISOString()}\n\n`
     writeLog(syncLog, true, "sync");
     console.log("[SYNC] Sync complete")
-    disableMaintenance(toDeployment);
+    setMaintenanceMode(toDeployment, false);
 }
 
 module.exports = {

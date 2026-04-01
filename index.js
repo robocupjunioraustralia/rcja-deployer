@@ -15,7 +15,7 @@ const CronJob = require('cron').CronJob;
 
 const { runSyncDatabases } = require('./functions/syncDatabases');
 const { runDatabaseMigrations } = require('./functions/migrate');
-const { enableMaintenance, disableMaintenance } = require('./functions/maintenance');
+const { setMaintenanceMode } = require('./functions/docker');
 const { writeLog } = require('./functions/logging');
 const { rebuildViews } = require('./functions/rebuildViews');
 const { rebuildNPM } = require('./functions/rebuildNPM');
@@ -178,7 +178,7 @@ app.post('/deploy', async (req, res) => {
   console.log(`[DEPLOYER] Deploying ${req.body.repository.full_name} (${req.body.ref}) to ${selected_deployment.title}...`);
   let deployLog = `--- Deploying ${req.body.repository.full_name} (${req.body.ref}) to ${selected_deployment.title} ---\n`;
 
-  enableMaintenance(selected_deployment);
+  setMaintenanceMode(selected_deployment, true);
   deployLog += `Deployment started on ${new Date().toISOString()}\n\n`;
   // Execute the shell script to pull the latest changes from the branch
   exec(`cd ${selected_deployment.path} && ${selected_deployment.pull_cmd}`, async (err, stdout, stderr) => {
@@ -234,7 +234,7 @@ app.post('/deploy', async (req, res) => {
 
     writeLog(deployLog, true, "deploy");
     res.status(200).send('OK');
-    disableMaintenance(selected_deployment);
+    setMaintenanceMode(selected_deployment, false);
   });
 });
 

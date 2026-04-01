@@ -6,7 +6,7 @@ const { rebuildViews } = require('./rebuildViews');
 const { rebuildUsers } = require('./rebuildUsers');
 const { rebuildForeignKeys } = require('./rebuildForeignKeys');
 const { runDatabaseMigrations } = require('./migrate');
-const { enableMaintenance, disableMaintenance } = require('./maintenance');
+const { setMaintenanceMode } = require('./docker');
 const { writeLog } = require('./logging');
 
 /**
@@ -142,7 +142,7 @@ async function runImportDatabases(deployment, filePathsMain, filePathsComp) {
     console.log(`[IMPORT] IMPORTING DATABASES TO ${deployment.title}`);
     let importLog = `--- IMPORTING DATABASES TO ${deployment.title} ---`;
 
-    enableMaintenance(deployment);
+    setMaintenanceMode(deployment, true);
     importLog += `\n[IMPORT] Started on ${new Date().toISOString()}\n\n`;
 
     const [importFailed, newImportLog] = await importDatabases(deployment, filePathsMain, filePathsComp);
@@ -211,7 +211,7 @@ async function runImportDatabases(deployment, filePathsMain, filePathsComp) {
     importLog += `\n[IMPORT] Finished on ${new Date().toISOString()}\n\n`
     writeLog(importLog, true, "import");
     console.log("[IMPORT] Import complete")
-    disableMaintenance(deployment);
+    setMaintenanceMode(deployment, false);
 
     return [false, importLog];
 }
