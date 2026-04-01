@@ -3,4 +3,3 @@ backups/*
 .env
 deployments.json
 node_modules
-package-lock.json
