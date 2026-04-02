@@ -1,10 +1,10 @@
-const util = require('util');
-const path = require("path");
-const mysql = require('mysql');
-const fs = require('fs');
-const { spawn } = require('child_process');
+import util from 'util';
+import path from "path";
+import mysql from 'mysql';
+import fs from 'fs';
+import { spawn } from 'child_process';
 
-function getDeploymentBackupDir(selected_deployment, makeIfMissing) {
+export function getDeploymentBackupDir(selected_deployment, makeIfMissing) {
     const backupFolder = path.join(__dirname, '../backups');
     if (!fs.existsSync(backupFolder)) {
         if (!makeIfMissing) {
@@ -24,7 +24,7 @@ function getDeploymentBackupDir(selected_deployment, makeIfMissing) {
     return deploymentBackupFolder;
 }
 
-async function createDatabaseBackup(selected_deployment, join_comps = false, suffix = "") {
+export async function createDatabaseBackup(selected_deployment, join_comps = false, suffix = "") {
     let hasFailed = false;
     let backupLog = '\n\n[BACKUP] Running database backup...';
     console.log('[BACKUP] Running database backup...')
@@ -171,8 +171,3 @@ async function createDatabaseBackup(selected_deployment, join_comps = false, suf
     backupLog += '\n[BACKUP] Database backup complete\n';
     return { hasFailed, backupLog, backupName, backupDir, backupFiles };
 }
-
-module.exports = {
-    createDatabaseBackup,
-    getDeploymentBackupDir,
-};

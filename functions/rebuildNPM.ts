@@ -1,8 +1,8 @@
-const path = require("path");
-const { spawn } = require('child_process');
-const chalk = require('chalk');
+import path from "path";
+import { spawn } from 'child_process';
+import chalk from 'chalk';
 
-async function rebuildNPM(selected_deployment, buildCmd, buildOnly = false) {
+export async function rebuildNPM(selected_deployment, buildCmd, buildOnly = false) {
     if (!buildCmd) { buildCmd = selected_deployment.build_cmd; }
 
     let hasFailed = false;
@@ -94,7 +94,3 @@ async function rebuildNPM(selected_deployment, buildCmd, buildOnly = false) {
     if (hasFailed) { return [hasFailed, npmLog]; }
     return [hasFailed, npmLog];
 }
-
-module.exports = {
-    rebuildNPM
-};

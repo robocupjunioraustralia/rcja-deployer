@@ -1,4 +1,4 @@
-import { deploymentExec } from './deployment.js';
+import { deploymentExec } from './deployment';
 
 const SERVICE_APP = 'app';
 const SERVICE_DB = 'db';

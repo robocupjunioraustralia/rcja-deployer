@@ -1,12 +1,12 @@
-const mariadb = require('mariadb');
-const fs = require('fs');
-const path = require('path');
-const phpParser = require('php-parser');
+import mariadb from 'mariadb';
+import fs from 'fs';
+import path from 'path';
+import phpParser from 'php-parser';
 
-async function rebuildUsers(deploymentInfo) {
+export async function rebuildUsers(deploymentInfo) {
     let rebuildUsersFailed = false;
     let rebuildUsersLog = "";
-    
+
     try {
         // Retrieve database credentials from the deployment config
         const connectdb = fs.readFileSync(path.join(deploymentInfo.path, '/utils/config.php'), 'utf8');
@@ -35,13 +35,13 @@ async function rebuildUsers(deploymentInfo) {
 
         await conn.query(`CREATE USER '${deploymentInfo.database_prefix}_lp'@'localhost' IDENTIFIED BY '${db_lp_pw}'`);
         await conn.query(`CREATE USER '${deploymentInfo.database_prefix}_hp'@'localhost' IDENTIFIED BY '${db_hp_pw}'`);
-        
+
         await conn.query(`GRANT SELECT ON ${deploymentInfo.database_prefix}_main.* TO '${deploymentInfo.database_prefix}_lp'@'localhost'`);
         await conn.query(`GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, FILE, INDEX, ALTER, CREATE TEMPORARY TABLES, CREATE VIEW, EVENT, TRIGGER, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, EXECUTE ON *.* TO '${deploymentInfo.database_prefix}_hp'@'localhost'`);
-        
+
         console.log(`[REBUILDUSERS] Rebuild users: ${deploymentInfo.database_prefix}_lp and ${deploymentInfo.database_prefix}_hp`);
         rebuildUsersLog += `\n[REBUILDUSERS] Rebuild users: ${deploymentInfo.database_prefix}_lp and ${deploymentInfo.database_prefix}_hp`;
-        
+
         const allComps = await conn.query("SELECT uid, db_lp_pwd, db_hp_pwd FROM comps");
 
         for (const comp of allComps) {
@@ -52,7 +52,7 @@ async function rebuildUsers(deploymentInfo) {
 
             const lp_random_pw = comp.db_lp_pwd;
             const hp_random_pw = comp.db_hp_pwd;
-            
+
             await conn.query(`DROP USER IF EXISTS '${un_lp}'@'localhost'`);
             await conn.query(`DROP USER IF EXISTS '${un_hp}'@'localhost'`);
 
@@ -81,7 +81,7 @@ async function rebuildUsers(deploymentInfo) {
             console.log(`[REBUILDUSERS] Rebuild users: ${un_lp} and ${un_hp}`);
             rebuildUsersLog += `\n[REBUILDUSERS] Rebuild users: ${un_lp} and ${un_hp}`;
         }
-        
+
         conn.release();
         await pool.end();
     } catch (err) {
@@ -92,8 +92,4 @@ async function rebuildUsers(deploymentInfo) {
     }
 
     return [rebuildUsersFailed, rebuildUsersLog]
-}
-
-module.exports = {
-    rebuildUsers
 }

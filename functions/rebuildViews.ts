@@ -1,9 +1,9 @@
-const mariadb = require('mariadb');
-const fs = require('fs');
-const path = require('path');
-const { spawn } = require('child_process');
+import mariadb from 'mariadb';
+import fs from 'fs';
+import path from 'path';
+import { spawn } from 'child_process';
 
-async function rebuildViews(deploymentInfo) {
+export async function rebuildViews(deploymentInfo) {
     let rebuildViewsFailed = false;
     let rebuildViewsLog = "";
 
@@ -150,8 +150,4 @@ async function rebuildViews(deploymentInfo) {
     }
 
     return [rebuildViewsFailed, rebuildViewsLog]
-}
-
-module.exports = {
-    rebuildViews
 }

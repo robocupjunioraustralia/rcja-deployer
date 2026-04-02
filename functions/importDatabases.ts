@@ -1,13 +1,12 @@
-const mariadb = require('mariadb');
-const fs = require('fs');
-const { spawn } = require('child_process');
-
-const { rebuildViews } = require('./rebuildViews');
-const { rebuildUsers } = require('./rebuildUsers');
-const { rebuildForeignKeys } = require('./rebuildForeignKeys');
-const { runDatabaseMigrations } = require('./migrate');
-const { setMaintenanceMode } = require('./docker');
-const { writeLog } = require('./logging');
+import mariadb from 'mariadb';
+import fs from 'fs';
+import { spawn } from 'child_process';
+import { rebuildViews } from './rebuildViews';
+import { rebuildUsers } from './rebuildUsers';
+import { rebuildForeignKeys } from './rebuildForeignKeys';
+import { runDatabaseMigrations } from './migrate';
+import { setMaintenanceMode } from './docker';
+import { writeLog } from './logging';
 
 /**
  * Import databases from SQL dump files
@@ -138,7 +137,7 @@ async function importDatabases(deployment, filePathsMain, filePathsComp) {
     return [importFailed, importLog]
 }
 
-async function runImportDatabases(deployment, filePathsMain, filePathsComp) {
+export async function runImportDatabases(deployment, filePathsMain, filePathsComp) {
     console.log(`[IMPORT] IMPORTING DATABASES TO ${deployment.title}`);
     let importLog = `--- IMPORTING DATABASES TO ${deployment.title} ---`;
 
@@ -215,7 +214,3 @@ async function runImportDatabases(deployment, filePathsMain, filePathsComp) {
 
     return [false, importLog];
 }
-
-module.exports = {
-    runImportDatabases
-};

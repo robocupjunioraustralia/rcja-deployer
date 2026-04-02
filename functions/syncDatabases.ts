@@ -1,12 +1,11 @@
-const mariadb = require('mariadb');
-
-const { rebuildViews } = require('./rebuildViews');
-const { rebuildUsers } = require('./rebuildUsers');
-const { rebuildForeignKeys } = require('./rebuildForeignKeys');
-const { anonymiseDatabase } = require('./anonymiseDatabase');
-const { runDatabaseMigrations } = require('./migrate');
-const { setMaintenanceMode } = require('./docker');
-const { writeLog } = require('./logging');
+import mariadb from 'mariadb';
+import { rebuildViews } from './rebuildViews';
+import { rebuildUsers } from './rebuildUsers';
+import { rebuildForeignKeys } from './rebuildForeignKeys';
+import { anonymiseDatabase } from './anonymiseDatabase';
+import { runDatabaseMigrations } from './migrate';
+import { setMaintenanceMode } from './docker';
+import { writeLog } from './logging';
 
 // This function syncronises the databases between the production and staging servers
 // All of the databases on the production server will be copied to the staging server
@@ -132,7 +131,7 @@ async function syncDatabases(fromDeployment, toDeployment) {
     return [syncFailed, syncLog]
 }
 
-async function runSyncDatabases(fromDeployment, toDeployment) {
+export async function runSyncDatabases(fromDeployment, toDeployment) {
     console.log(`[SYNC] Syncing ${fromDeployment.title} to ${toDeployment.title}...`);
     let syncLog = `--- SYNCING ${fromDeployment.title} TO ${toDeployment.title} ---\n`;
 
@@ -221,8 +220,3 @@ async function runSyncDatabases(fromDeployment, toDeployment) {
     console.log("[SYNC] Sync complete")
     setMaintenanceMode(toDeployment, false);
 }
-
-module.exports = {
-    syncDatabases,
-    runSyncDatabases
-};

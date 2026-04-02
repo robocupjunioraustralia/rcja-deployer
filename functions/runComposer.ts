@@ -1,7 +1,7 @@
-const path = require("path");
-const { spawn } = require('child_process');
+import path from "path";
+import { spawn } from 'child_process';
 
-async function runComposer(selected_deployment, noDev) {
+export async function runComposer(selected_deployment, noDev) {
     let hasFailed = false;
     let composerLog = '\n\n[COMPOSER] Running composer install...';
     console.log('[COMPOSER] Running composer install...');
@@ -56,7 +56,3 @@ async function runComposer(selected_deployment, noDev) {
     composerLog += '\n[COMPOSER] Composer install finished';
     return [hasFailed, composerLog];
 }
-
-module.exports = {
-    runComposer
-};

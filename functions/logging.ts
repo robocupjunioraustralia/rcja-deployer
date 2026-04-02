@@ -1,8 +1,8 @@
-const path = require("path");
-const fs = require('fs');
-const nodemailer = require('nodemailer');
+import path from "path";
+import fs from 'fs';
+import nodemailer from 'nodemailer';
 
-function writeLog(message, success, type) {
+export function writeLog(message, success, type) {
     const logDir = path.join(__dirname, '../logs');
     if (!fs.existsSync(logDir)) {
         fs.mkdirSync(logDir);
@@ -39,7 +39,7 @@ function writeLog(message, success, type) {
     }
 }
 
-function sendEmail(subject, message, attachment) {
+export function sendEmail(subject, message, attachment) {
     if (!process.env.SMTP_HOST) {
         console.log('[DEPLOYER] SMTP not configured, skipping email sending');
         return;
@@ -69,9 +69,4 @@ function sendEmail(subject, message, attachment) {
             console.log(`[DEPLOYER] Email sent: ${info.response}`);
         }
     });
-}
-
-module.exports = {
-    writeLog,
-    sendEmail
 }

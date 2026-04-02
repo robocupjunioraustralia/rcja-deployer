@@ -1,7 +1,7 @@
-const mariadb = require('mariadb');
-const { spawn } = require('child_process');
+import mariadb from 'mariadb';
+import { spawn } from 'child_process';
 
-async function rebuildForeignKeys(deploymentInfo) {
+export async function rebuildForeignKeys(deploymentInfo) {
     let rebuildFKeysFailed = false;
     let rebuildFKeysLog = "";
 
@@ -149,8 +149,4 @@ async function rebuildForeignKeys(deploymentInfo) {
     }
 
     return [rebuildFKeysFailed, rebuildFKeysLog]
-}
-
-module.exports = {
-    rebuildForeignKeys
 }

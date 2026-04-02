@@ -1,25 +1,25 @@
 // Runner for command-line scripts
 
-const { exec } = require('child_process');
-const dotenv = require("dotenv");
-const path = require("path");
-const fs = require('fs');
-const os = require('os');
-const inquirer = require('inquirer');
-const unzipper = require('unzipper');
-const chalk = require('chalk');
-const { Readable } = require('stream');
-const { finished } = require('stream/promises');
+import { exec } from 'child_process';
+import dotenv from "dotenv";
+import path from "path";
+import fs from 'fs';
+import os from 'os';
+import inquirer from 'inquirer';
+import unzipper from 'unzipper';
+import chalk from 'chalk';
+import { Readable } from 'stream';
+import { finished } from 'stream/promises';
 
-const { rebuildViews } = require('./functions/rebuildViews');
-const { runSyncDatabases } = require('./functions/syncDatabases');
-const { runImportDatabases } = require('./functions/importDatabases');
-const { anonymiseDatabase } = require('./functions/anonymiseDatabase');
-const { rebuildForeignKeys } = require('./functions/rebuildForeignKeys');
-const { runDatabaseMigrations } = require('./functions/migrate');
-const { rebuildUsers } = require('./functions/rebuildUsers');
-const { rebuildNPM } = require('./functions/rebuildNPM');
-const { getDeploymentBackupDir } = require("./functions/backup");
+import { rebuildViews } from './functions/rebuildViews';
+import { runSyncDatabases } from './functions/syncDatabases';
+import { runImportDatabases } from './functions/importDatabases';
+import { anonymiseDatabase } from './functions/anonymiseDatabase';
+import { rebuildForeignKeys } from './functions/rebuildForeignKeys';
+import { runDatabaseMigrations } from './functions/migrate';
+import { rebuildUsers } from './functions/rebuildUsers';
+import { rebuildNPM } from './functions/rebuildNPM';
+import { getDeploymentBackupDir } from "./functions/backup";
 
 dotenv.config();
 
@@ -83,7 +83,7 @@ function getDeploymentConfig(deploymentName) {
 //
 //   params:
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
-async function triggerUpdate() {
+export async function triggerUpdate() {
     if (!(await checkUpToDate())) {
         return;
     }
@@ -167,7 +167,7 @@ async function triggerUpdate() {
 //
 //   params:
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
-async function triggerImport() {
+export async function triggerImport() {
     if (!(await checkUpToDate())) {
         return;
     }
@@ -424,7 +424,7 @@ async function triggerImport() {
 //
 //   params:
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
-async function triggerMigrate() {
+export async function triggerMigrate() {
     const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
     let selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
 
@@ -463,7 +463,7 @@ async function triggerMigrate() {
 //
 //   params:
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
-async function triggerRebuildViews() {
+export async function triggerRebuildViews() {
     const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
     let selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
 
@@ -489,7 +489,7 @@ async function triggerRebuildViews() {
 //
 //   params:
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
-async function triggerAnonymise() {
+export async function triggerAnonymise() {
     const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
     let selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
 
@@ -513,7 +513,7 @@ async function triggerAnonymise() {
 // npm run syncDatabases (deployment)
 //   Syncronises the production database to the development database
 //   uses env.SYNC_FROM_DEPLOYMENT and env.SYNC_TO_DEPLOYMENT to determine which deployments to sync
-async function triggerSyncDatabases() {
+export async function triggerSyncDatabases() {
     const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
     const fromDeployment = deployments_info[process.env.SYNC_FROM_DEPLOYMENT];
     const toDeployment = deployments_info[process.env.SYNC_TO_DEPLOYMENT];
@@ -526,7 +526,7 @@ async function triggerSyncDatabases() {
 //
 //   params:
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
-async function triggerRebuildUsers() {
+export async function triggerRebuildUsers() {
     const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
     let selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
 
@@ -552,7 +552,7 @@ async function triggerRebuildUsers() {
 //
 //   params:
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
-async function triggerRebuildForeignKeys() {
+export async function triggerRebuildForeignKeys() {
     const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
     let selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
 
@@ -580,7 +580,7 @@ async function triggerRebuildForeignKeys() {
 //
 //   params:
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
-async function triggerNPM() {
+export async function triggerNPM() {
     let selected_cmd = 'build';
     if (process.argv.includes('watch')) { selected_cmd = 'watch'; }
     if (process.argv.includes('publish')) { selected_cmd = 'publish'; }
@@ -604,20 +604,6 @@ async function triggerNPM() {
     console.log(`Installing NPM dependencies and running ${selected_cmd} script for ${selected_deployment.title}...`)
     await rebuildNPM(selected_deployment, selected_cmd);
 }
-
-module.exports = {
-    update: triggerUpdate,
-    import: triggerImport,
-    migrate: triggerMigrate,
-    rebuildViews: triggerRebuildViews,
-    anonymise: triggerAnonymise,
-    syncDatabases: triggerSyncDatabases,
-    rebuildUsers: triggerRebuildUsers,
-    rebuildForeignKeys: triggerRebuildForeignKeys,
-    build: triggerNPM,
-    watch: triggerNPM,
-    publish: triggerNPM,
-};
 
 require('make-runnable/custom')({
     printOutputFrame: false

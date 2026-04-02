@@ -1,11 +1,11 @@
-const mariadb = require('mariadb');
-const phppass = require("node-php-password");
-const { faker } = require('@faker-js/faker');
+import mariadb from 'mariadb';
+import phppass from "node-php-password";
+import { faker } from '@faker-js/faker';
 
-async function anonymiseDatabase(deploymentInfo) {
+export async function anonymiseDatabase(deploymentInfo) {
     let anonFailed = false;
     let anonLog = "";
-    
+
     try {
         // Connect to the MariaDB server
         const pool = mariadb.createPool({
@@ -30,7 +30,7 @@ async function anonymiseDatabase(deploymentInfo) {
 
         // Retrieve the list of comp databases
         const compDatabases = await conn.query(`SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE '${deploymentInfo.database_prefix}_comp_%'`);
-        
+
         const importedMentorCache = await conn.query(`SELECT * FROM rcj_cms_deployer_cache.imported_mentor`);
         const importedTeamMemberCache = await conn.query(`SELECT * FROM rcj_cms_deployer_cache.imported_team_member`);
         const userCache = await conn.query(`SELECT * FROM rcj_cms_deployer_cache.user`);
@@ -39,20 +39,20 @@ async function anonymiseDatabase(deploymentInfo) {
         for (const compDb of compDatabases) {
             const dbName = compDb.SCHEMA_NAME;
             const compId = dbName.replace(`${deploymentInfo.database_prefix}_comp_`, '');
-            
+
             console.log(`[ANONYMISE] Anonymizing data in ${dbName}`);
             anonLog += `\n[ANONYMISE] Anonymizing data in ${dbName}`;
-            
-            
+
+
             // Connect to the comp database
             await conn.query(`USE ${dbName}`);
-            
+
             // Anonymize the data in the imported_mentor table
             const importedMentorRows = await conn.query('SELECT * FROM imported_mentor');
-            let numNewMentors = 0; 
+            let numNewMentors = 0;
             for (const row of importedMentorRows) {
                 const cachedMentor = importedMentorCache.find(cacheRow => cacheRow.uid_imported_mentor == row.uid && cacheRow.uid_comp == compId);
-                
+
                 if (cachedMentor) {
                     await conn.query(
                         'UPDATE imported_mentor SET mentor_first = ?, mentor_last = ?, mentor_email = ?, mentor_phone = ? WHERE uid = ?',
@@ -78,8 +78,8 @@ async function anonymiseDatabase(deploymentInfo) {
                 numNewMentors++;
             }
             console.log(`[ANONYMISE] IMPORTED_MENTOR: ${importedMentorRows.length} updated, ${numNewMentors} new`);
-            anonLog += `\n[ANONYMISE] IMPORTED_MENTOR: ${importedMentorRows.length} updated, ${numNewMentors} new`;            
-            
+            anonLog += `\n[ANONYMISE] IMPORTED_MENTOR: ${importedMentorRows.length} updated, ${numNewMentors} new`;
+
             // Anonymize the data in the imported_team_member table
             const importedTeamMemberRows = await conn.query('SELECT * FROM imported_team_member');
             let numNewTeamMembers = 0;
@@ -132,7 +132,7 @@ async function anonymiseDatabase(deploymentInfo) {
                     first_name: faker.name.firstName(),
                     last_name: faker.name.lastName(),
                     phone_number: faker.phone.number("04########"),
-                    username: faker.internet.userName(),                    
+                    username: faker.internet.userName(),
                 }
                 await conn.query(
                     'UPDATE user SET first_name = ?, last_name = ?, phone_number = ?, username = ? WHERE uid = ?',
@@ -147,7 +147,7 @@ async function anonymiseDatabase(deploymentInfo) {
             console.log(`[ANONYMISE] USER: ${userRows.length} updated, ${numNewUsers} new`);
             anonLog += `\n[ANONYMISE] USER: ${userRows.length} updated, ${numNewUsers} new`;
 
-            // Anonymise user password/pin 
+            // Anonymise user password/pin
             let numPassUpdated = 0;
             let numPinUpdated = 0;
             for (const row of userRows) {
@@ -205,8 +205,4 @@ async function anonymiseDatabase(deploymentInfo) {
     }
 
     return [anonFailed, anonLog]
-}
-
-module.exports = {
-    anonymiseDatabase
 }

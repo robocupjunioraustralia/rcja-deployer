@@ -1,21 +1,19 @@
-const util = require('util');
-const path = require("path");
-const mysql = require('mysql');
-const os = require('os');
-const fs = require('fs');
-const fse = require('fs-extra');
-const { spawn } = require('child_process');
-
-const { createDatabaseBackup } = require('./backup');
-const { runComposer } = require('./runComposer');
-
+import util from 'util';
+import path from 'path';
+import mysql from 'mysql';
+import os from 'os';
+import fs from 'fs';
+import fse from 'fs-extra';
+import { spawn } from 'child_process';
+import { createDatabaseBackup } from './backup';
+import { runComposer } from './runComposer';
 import {
     getDeploymentVersion,
     getDeploymentTags,
     deploymentHasUncommittedChanges,
     getCurrentBranch,
     checkoutDeploymentTo
-} from './deployment.js';
+} from './deployment';
 
 /**
  * Create a temporary directory with a copy of all migration files in the updates folder
@@ -56,9 +54,15 @@ function isDeploymentVersionCompatible(minVersion, deploymentVersion) {
 }
 
 
-async function runDatabaseMigrations(selected_deployment, skipBackup, no_composer_dev) {
+export async function runDatabaseMigrations(selected_deployment, skipBackup, no_composer_dev) {
     let hasFailed = false;
     let migrationLog = '';
+
+    const deploymentVersion = getDeploymentVersion(selected_deployment);
+    const deploymentTags = await getDeploymentTags(selected_deployment);
+
+
+
     console.log('[MIGRATE] Ensuring composer dependencies are up to date...');
     migrationLog += '\n[MIGRATE] Ensuring composer dependencies are up to date...';
 
@@ -72,9 +76,6 @@ async function runDatabaseMigrations(selected_deployment, skipBackup, no_compose
     if (hasFailed) { return [hasFailed, migrationLog]; }
 
     console.log('[MIGRATE] Running database migrations...')
-
-    const deploymentVersion = getDeploymentVersion(selected_deployment);
-    const deploymentTags = await getDeploymentTags(selected_deployment);
 
     // Check if the deployment version is compatible with this version of the deployer
     const minVersion = [24, 4, 0];
@@ -547,7 +548,3 @@ async function runDatabaseMigrations(selected_deployment, skipBackup, no_compose
 
     return [hasFailed, migrationLog];
 }
-
-module.exports = {
-    runDatabaseMigrations
-};

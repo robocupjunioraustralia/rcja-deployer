@@ -1,25 +1,24 @@
-const Sentry = require("@sentry/node");
-const { nodeProfilingIntegration } = require("@sentry/profiling-node");
-const { exec } = require('child_process');
-const express = require("express");
-const bodyParser = require("body-parser");
-const morgan = require("morgan");
-const dotenv = require("dotenv");
-const path = require("path");
-const crypto = require('crypto');
-const fs = require('fs');
-const os = require('os');
-const archiver = require('archiver');
-const { spawn } = require('child_process');
-const CronJob = require('cron').CronJob;
-
-const { runSyncDatabases } = require('./functions/syncDatabases');
-const { runDatabaseMigrations } = require('./functions/migrate');
-const { setMaintenanceMode } = require('./functions/docker');
-const { writeLog } = require('./functions/logging');
-const { rebuildViews } = require('./functions/rebuildViews');
-const { rebuildNPM } = require('./functions/rebuildNPM');
-const { createDatabaseBackup, getDeploymentBackupDir } = require("./functions/backup");
+import Sentry from "@sentry/node";
+import { nodeProfilingIntegration } from "@sentry/profiling-node";
+import { exec } from 'child_process';
+import express from "express";
+import bodyParser from "body-parser";
+import morgan from "morgan";
+import dotenv from "dotenv";
+import path from "path";
+import crypto from 'crypto';
+import fs from 'fs';
+import os from 'os';
+import archiver from 'archiver';
+import { spawn } from 'child_process';
+import { CronJob } from "cron";
+import { runSyncDatabases } from './functions/syncDatabases';
+import { runDatabaseMigrations } from './functions/migrate';
+import { setMaintenanceMode } from './functions/docker';
+import { writeLog } from './functions/logging';
+import { rebuildViews } from './functions/rebuildViews';
+import { rebuildNPM } from './functions/rebuildNPM';
+import { createDatabaseBackup, getDeploymentBackupDir } from "./functions/backup";
 
 dotenv.config();
 

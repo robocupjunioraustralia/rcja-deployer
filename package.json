@@ -2,20 +2,20 @@
   "name": "rcja-deployer",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "index.ts",
   "scripts": {
-    "start": "node index.js",
-    "update": "node scripts.js update",
-    "import": "node scripts.js import",
-    "migrate": "node scripts.js migrate",
-    "rebuildViews": "node scripts.js rebuildViews",
-    "rebuildUsers": "node scripts.js rebuildUsers",
-    "rebuildForeignKeys": "node scripts.js rebuildForeignKeys",
-    "anonymise": "node scripts.js anonymise",
-    "syncDatabases": "node scripts.js syncDatabases",
-    "build": "node scripts.js build",
-    "watch": "node scripts.js watch",
-    "publish": "node scripts.js publish"
+    "start": "ts-node -T index.ts",
+    "update": "ts-node -T scripts.ts update",
+    "import": "ts-node -T scripts.ts import",
+    "migrate": "ts-node -T scripts.ts migrate",
+    "rebuildViews": "ts-node -T scripts.ts rebuildViews",
+    "rebuildUsers": "ts-node -T scripts.ts rebuildUsers",
+    "rebuildForeignKeys": "ts-node -T scripts.ts rebuildForeignKeys",
+    "anonymise": "ts-node -T scripts.ts anonymise",
+    "syncDatabases": "ts-node -T scripts.ts syncDatabases",
+    "build": "ts-node -T scripts.ts build",
+    "watch": "ts-node -T scripts.ts watch",
+    "publish": "ts-node -T scripts.ts publish"
   },
   "author": "",
   "license": "ISC",
@@ -43,6 +43,18 @@
     "nodemailer": "^6.9.1",
     "path": "^0.12.7",
     "php-parser": "^3.1.4",
+    "ts-node": "^10.9.2",
     "unzipper": "^0.12.3"
+  },
+  "devDependencies": {
+    "@types/archiver": "^7.0.0",
+    "@types/express": "^5.0.6",
+    "@types/fs-extra": "^11.0.4",
+    "@types/inquirer": "^9.0.9",
+    "@types/morgan": "^1.9.10",
+    "@types/mysql": "^2.15.27",
+    "@types/node": "^25.5.0",
+    "@types/unzipper": "^0.10.11",
+    "typescript": "^6.0.2"
   }
 }
