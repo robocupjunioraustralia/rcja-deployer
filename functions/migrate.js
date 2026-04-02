@@ -9,180 +9,13 @@ const { spawn } = require('child_process');
 const { createDatabaseBackup } = require('./backup');
 const { runComposer } = require('./runComposer');
 
-/**
- * Find what version the deployment is currently on (it's stored in package.json, or null if unknown)
- * It's stored in the "version" field of the package.json file
- * If the package.json file doesn't exist, or the version field is missing,
- *   then the version is less than 23.8.0 (the first version to include the version field)
- * @param {string} deploymentPath The path to the deployment
- * @returns {string|null} The version of the deployment, or null if unknown
- */
-function getDeploymentVersion(deploymentPath) {
-    const packageJsonPath = path.join(deploymentPath, 'package.json');
-    if (!fs.existsSync(packageJsonPath)) {
-        return null;
-    }
-
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-    return packageJson.version || null;
-}
-
-/**
- * Find the list of git tags that are available for the deployment
- * This represents the list of releases that can be switched to when running migrations
- * @param {string} deploymentPath The path to the deployment
- * @returns {Promise<string[]>} The list of git tags available for the deployment
- */
-async function getDeploymentTags(deploymentPath) {
-    return new Promise((resolve, reject) => {
-        const git = spawn('git', ['tag'], {
-            cwd: deploymentPath,
-            shell: true
-        });
-
-        let tags = '';
-        git.stdout.on('data', (data) => {
-            tags += data.toString();
-        });
-
-        git.stderr.on('data', (data) => {
-            console.error(data.toString());
-        });
-
-        git.on('exit', (code) => {
-            if (code === 0) {
-                resolve(tags.split('\n').filter(tag => tag !== ''));
-            } else {
-                reject();
-            }
-        });
-
-        git.on('error', (err) => {
-            console.error(err);
-            reject(err);
-        });
-    });
-}
-
-/**
- * Check if the deployment has uncommitted changes
- * @param {string} deploymentPath The path to the deployment
- * @returns {Promise<boolean>} True if there are uncommitted changes, false otherwise
- */
-async function deploymentHasUncommittedChanges(deploymentPath) {
-    return new Promise((resolve, reject) => {
-        const git = spawn('git', ['status', '--porcelain'], {
-            cwd: deploymentPath,
-            shell: true
-        });
-
-        let status = '';
-        git.stdout.on('data', (data) => {
-            status += data.toString();
-        });
-
-        git.stderr.on('data', (data) => {
-            console.error(data.toString());
-        });
-
-        git.on('exit', (code) => {
-            if (code === 0) {
-                resolve(status.trim() !== '');
-            } else {
-                reject();
-            }
-        });
-
-        git.on('error', (err) => {
-            console.error(err);
-            reject(err);
-        });
-    });
-}
-
-/**
- * Get the current git branch of the deployment so we can
- * jump back to wherever we were after running migrations
- * @param {string} deploymentPath The path to the deployment
- * @param {boolean} useHash Whether to use the hash of the commit instead of the branch name (e.g. if the deployment is in a detached state)
- * @returns {Promise<string>} The current branch name of the deployment (or the commit hash if useHash is true)
- */
-async function getCurrentBranch(deploymentPath, useHash = false) {
-    return new Promise((resolve, reject) => {
-        const git = spawn(
-            'git',
-            useHash ? ['rev-parse', 'HEAD'] : ['rev-parse', '--abbrev-ref', 'HEAD'],
-            {
-                cwd: deploymentPath,
-                shell: true
-            }
-        );
-
-        let branch = '';
-        git.stdout.on('data', (data) => {
-            branch += data.toString();
-        });
-
-        git.stderr.on('data', (data) => {
-            console.error(data.toString());
-        });
-
-        git.on('exit', async (code) => {
-            if (code === 0) {
-                let branchName = branch.trim();
-
-                if (branchName === "HEAD" && !useHash) {
-                    branchName = await getCurrentBranch(deploymentPath, true);
-                }
-
-                resolve(branchName);
-            } else {
-                reject();
-            }
-        });
-
-        git.on('error', (err) => {
-            console.error(err);
-            reject(err);
-        });
-    });
-}
-
-/**
- * Checkout to a specific tag/branch/hash in the deployment
- * @param {string} deploymentPath The path to the deployment
- * @param {string} target The tag/branch/hash to checkout to
- * @returns {Promise<void>}
- */
-async function checkoutDeploymentTo(deploymentPath, target) {
-    return new Promise((resolve, reject) => {
-        const git = spawn('git', ['checkout', target], {
-            cwd: deploymentPath,
-            shell: true
-        });
-
-        git.stdout.on('data', (data) => {
-            console.log(data.toString());
-        });
-
-        git.stderr.on('data', (data) => {
-            console.error(data.toString());
-        });
-
-        git.on('exit', (code) => {
-            if (code === 0) {
-                resolve();
-            } else {
-                reject();
-            }
-        });
-
-        git.on('error', (err) => {
-            console.error(err);
-            reject(err);
-        });
-    });
-}
+import {
+    getDeploymentVersion,
+    getDeploymentTags,
+    deploymentHasUncommittedChanges,
+    getCurrentBranch,
+    checkoutDeploymentTo
+} from './deployment.js';
 
 /**
  * Create a temporary directory with a copy of all migration files in the updates folder
@@ -240,8 +73,8 @@ async function runDatabaseMigrations(selected_deployment, skipBackup, no_compose
 
     console.log('[MIGRATE] Running database migrations...')
 
-    const deploymentVersion = getDeploymentVersion(selected_deployment.path);
-    const deploymentTags = await getDeploymentTags(selected_deployment.path);
+    const deploymentVersion = getDeploymentVersion(selected_deployment);
+    const deploymentTags = await getDeploymentTags(selected_deployment);
 
     // Check if the deployment version is compatible with this version of the deployer
     const minVersion = [24, 4, 0];
@@ -449,7 +282,7 @@ async function runDatabaseMigrations(selected_deployment, skipBackup, no_compose
     const migrationsOutsideCurrentRelease = Object.keys(newMigrations).filter(release => release !== deploymentVersion);
     if (
         migrationsOutsideCurrentRelease.length > 0
-        && await deploymentHasUncommittedChanges(selected_deployment.path)
+        && await deploymentHasUncommittedChanges(selected_deployment)
     ) {
         const failMessage = `[MIGRATE] Unable to proceed: Uncommitted changes in deployment directory and migrations outside current release`
             + `\n   - You are currently on: ${deploymentVersion}`
@@ -493,7 +326,7 @@ async function runDatabaseMigrations(selected_deployment, skipBackup, no_compose
     migrationLog += '\n[MIGRATE] Views dropped, proceeding with migrations...';
 
     // Run the migrations
-    const initialBranch = await getCurrentBranch(selected_deployment.path);
+    const initialBranch = await getCurrentBranch(selected_deployment);
     let currentReleaseTag = deploymentVersion;
     let tempUpdatesDirPath = null; // used if we need to switch tags, so we can still run the original migrations
     console.log(`[MIGRATE] Deployment is currently on release ${currentReleaseTag} (at ${initialBranch})`);
@@ -521,7 +354,7 @@ async function runDatabaseMigrations(selected_deployment, skipBackup, no_compose
                 migrationLog += `\n[MIGRATE] Created temporary directory with migration files: ${tempUpdatesDirPath}`;
             }
 
-            await checkoutDeploymentTo(selected_deployment.path, targetToCheckout).catch((err) => {
+            await checkoutDeploymentTo(selected_deployment, targetToCheckout).catch((err) => {
                 console.error('[MIGRATE] Error switching to tag:', err.message);
                 migrationLog += '\n[MIGRATE] Error switching to tag: ' + err.message;
                 hasFailed = true;
@@ -691,7 +524,7 @@ async function runDatabaseMigrations(selected_deployment, skipBackup, no_compose
         console.log(`[MIGRATE] Switching back to branch ${initialBranch}...`);
         migrationLog += `\n[MIGRATE] Switching back to branch ${initialBranch}...`;
 
-        await checkoutDeploymentTo(selected_deployment.path, initialBranch).catch((err) => {
+        await checkoutDeploymentTo(selected_deployment, initialBranch).catch((err) => {
             console.error('[MIGRATE] Error switching back to branch:', err.message);
             migrationLog += '\n[MIGRATE] Error switching back to branch: ' + err.message;
             hasFailed = true;

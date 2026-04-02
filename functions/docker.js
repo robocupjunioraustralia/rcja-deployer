@@ -1,9 +1,12 @@
-import { spawn } from 'child_process';
+import { deploymentExec } from './deployment.js';
+
+const SERVICE_APP = 'app';
+const SERVICE_DB = 'db';
 
 /**
  * Runs `docker compose exec -T [<service>] [<command>] [<args>]` in the specified working directory
  *
- * @param {string} cwd Working directory where docker-compose.yml is
+ * @param {string} cwd Working directory of the deployment where docker-compose.yml is
  * @param {string} service The service name defined in docker-compose.yml
  * @param {string} command The command to run inside the container
  * @param {string[]} args Args to be added after the command
@@ -11,49 +14,28 @@ import { spawn } from 'child_process';
  * @throws {Error} If the docker process fails to start or the command exits with a non-zero code
  */
 export function dockerComposeExec(cwd, service, command, args = []) {
-    return new Promise((resolve, reject) => {
-        let stdout = '';
-        let stderr = '';
-        let combined = '';
+    return deploymentExec(
+        cwd,
+        'docker',
+        ['compose', 'exec', '-T', service, command, ...args]
+    );
+}
 
-        const child = spawn(
-            'docker',
-            ['compose', 'exec', '-T', service, command, ...args],
-            { cwd, shell: true },
-        );
-
-        child.stdout.on('data', (chunk) => {
-            const text = chunk.toString();
-            stdout += text;
-            combined += text;
-            process.stdout.write(text);
-        });
-
-        child.stderr.on('data', (chunk) => {
-            const text = chunk.toString();
-            stderr += text;
-            combined += text;
-            process.stderr.write(text);
-        });
-
-        child.on('error', (err) => {
-            reject(new Error(`Failed to start docker process: ${err.message}`));
-        });
-
-        child.on('close', (code) => {
-            if (code !== 0) {
-                reject(new Error(`Command failed with exit code ${code}`));
-                return;
-            }
-
-            resolve({
-                code,
-                stdout,
-                stderr,
-                log: combined,
-            });
-        });
-    });
+/**
+ * Start an RCJ CMS instance, optionally building it first
+ *
+ * @param {object} selected_deployment
+ * @param {boolean} build Whether to run with --build to ensure the latest code is used
+ * @returns {Promise<void>}
+ */
+export async function start(selected_deployment, build) {
+    await dockerComposeExec(
+        selected_deployment.path,
+        SERVICE_APP,
+        'utils/setup/migrations.php',
+        build ? ['--build'] : []
+    );
+    console.log(`[DOCKER] instance started${build ? ' (and built)' : ''}`);
 }
 
 /**
@@ -66,9 +48,24 @@ export function dockerComposeExec(cwd, service, command, args = []) {
 export async function setMaintenanceMode(selected_deployment, enable) {
     await dockerComposeExec(
         selected_deployment.path,
-        'app',
+        SERVICE_APP,
         'utils/setup/maintenance.php',
         [enable ? 'on' : 'off']
     );
-    console.log(`[MAINTENANCE] Maintenance mode ${enable ? 'enabled' : 'disabled'}`);
+    console.log(`[DOCKER] Maintenance mode ${enable ? 'enabled' : 'disabled'}`);
+}
+
+/**
+ * Run migrations for an RCJ CMS instance
+ *
+ * @param {object} selected_deployment
+ * @returns {Promise<void>}
+ */
+export async function runMigrations(selected_deployment) {
+    await dockerComposeExec(
+        selected_deployment.path,
+        SERVICE_APP,
+        'utils/setup/migrations.php'
+    );
+    console.log(`[DOCKER] Migrations completed successfully`);
 }
