@@ -20,6 +20,7 @@ import { runDatabaseMigrations } from './functions/migrate';
 import { rebuildUsers } from './functions/rebuildUsers';
 import { rebuildNPM } from './functions/rebuildNPM';
 import { getDeploymentBackupDir } from "./functions/backup";
+import type { Deployment } from './functions/deployment';
 
 dotenv.config();
 
@@ -61,7 +62,7 @@ async function checkUpToDate() {
  * @param {string} deploymentName - Name of the deployment to retrieve
  * @returns {object|null} - Deployment config, or null if not found
  */
-function getDeploymentConfig(deploymentName) {
+function getDeploymentConfig(deploymentName: string): Deployment|null {
     const deployments = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
 
     if (deploymentName === undefined) {
@@ -88,12 +89,12 @@ export async function triggerUpdate() {
         return;
     }
 
-    const selected_deployment = getDeploymentConfig(process.argv[process.argv.indexOf('update') + 1]);
-    if (!selected_deployment) {
+    const deployment = getDeploymentConfig(process.argv[process.argv.indexOf('update') + 1]);
+    if (!deployment) {
         return;
     }
 
-    console.log(chalk.blue(`[DEPLOYER] Updating ${selected_deployment.title}...`));
+    console.log(chalk.blue(`[DEPLOYER] Updating ${deployment.title}...`));
     console.log(chalk.cyan(`[INFO] This tool allows you to:`));
     console.log(chalk.cyan(`[INFO] - Run any new migration scripts`));
     console.log(chalk.cyan(`[INFO] - Rebuild all views`));
@@ -137,27 +138,27 @@ export async function triggerUpdate() {
     if (user_answers.run_migrations) {
         // To mimic the production build process, we build assets before running migrations,
         // so make sure that happens in case a migration uses a new asset
-        await rebuildNPM(selected_deployment, 'build', true);
+        await rebuildNPM(deployment, 'build', true);
 
-        console.log(chalk.blue(`[DEPLOYER] Running migrations on ${selected_deployment.title}...`))
+        console.log(chalk.blue(`[DEPLOYER] Running migrations on ${deployment.title}...`))
         const [migrateFailed, migrateLog] = await runDatabaseMigrations(
-            selected_deployment,
-            !selected_deployment.backup,
-            selected_deployment.no_composer_dev || user_answers.npm_command === 'publish',
+            deployment,
+            !deployment.backup,
+            deployment.no_composer_dev || user_answers.npm_command === 'publish',
         );
         if (migrateFailed) {
-            console.error(chalk.red(`[DEPLOYER] Failed to run migrations on ${selected_deployment.title}`));
+            console.error(chalk.red(`[DEPLOYER] Failed to run migrations on ${deployment.title}`));
             return;
         }
     }
 
     if (user_answers.rebuild_views) {
-        console.log(chalk.blue(`[DEPLOYER] Rebuilding views on ${selected_deployment.title}...`))
-        await rebuildViews(selected_deployment);
+        console.log(chalk.blue(`[DEPLOYER] Rebuilding views on ${deployment.title}...`))
+        await rebuildViews(deployment);
     }
 
-    console.log(chalk.blue(`[DEPLOYER] Installing NPM dependencies and running ${user_answers.npm_command} script for ${selected_deployment.title}...`))
-    await rebuildNPM(selected_deployment, user_answers.npm_command);
+    console.log(chalk.blue(`[DEPLOYER] Installing NPM dependencies and running ${user_answers.npm_command} script for ${deployment.title}...`))
+    await rebuildNPM(deployment, user_answers.npm_command);
 }
 
 
@@ -172,8 +173,8 @@ export async function triggerImport() {
         return;
     }
 
-    const selected_deployment = getDeploymentConfig(process.argv[process.argv.indexOf('import') + 1]);
-    if (!selected_deployment) {
+    const deployment = getDeploymentConfig(process.argv[process.argv.indexOf('import') + 1]);
+    if (!deployment) {
         return;
     }
 
@@ -196,7 +197,7 @@ export async function triggerImport() {
         return hasConfirmed;
     }
 
-    console.log(chalk.blue(`[DEPLOYER] Import databases (${selected_deployment.title})`));
+    console.log(chalk.blue(`[DEPLOYER] Import databases (${deployment.title})`));
     console.log(chalk.cyan(`[INFO] This tool allows you to restore your deployment's databases from a backup`));
     console.log(" ");
 
@@ -206,7 +207,7 @@ export async function triggerImport() {
             name: 'importSource',
             message: `Select the import source to use:`,
             choices: [
-                { name: `Local - Backup created by the deployer in ./backups/${selected_deployment.database_prefix}`, value: 'local-backup' },
+                { name: `Local - Backup created by the deployer in ./backups/${deployment.database_prefix}`, value: 'local-backup' },
                 { name: 'Local - SQL files on the local machine', value: 'local-sql' },
                 { name: 'Remote - Import a backup from a remote deployment', value: 'remote' },
             ],
@@ -218,8 +219,8 @@ export async function triggerImport() {
 
     if (importSource === 'remote') {
 
-        if (!selected_deployment.import) {
-            console.error(chalk.red(`\n[DEPLOYER] Remote import is not configured in deployments.json for ${selected_deployment.title}`));
+        if (!deployment.import) {
+            console.error(chalk.red(`\n[DEPLOYER] Remote import is not configured in deployments.json for ${deployment.title}`));
             return;
         }
 
@@ -255,9 +256,9 @@ export async function triggerImport() {
             return;
         }
 
-        const remoteUrlBase = `${selected_deployment.import.remote_host}/export/${selected_deployment.import.deployment}`;
+        const remoteUrlBase = `${deployment.import.remote_host}/export/${deployment.import.deployment}`;
         const remoteHeaders = {
-            'Authorization': `Bearer ${selected_deployment.import.secret}`
+            'Authorization': `Bearer ${deployment.import.secret}`
         };
 
         if (backupName === null) {
@@ -285,7 +286,7 @@ export async function triggerImport() {
         }
 
         const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rcja-deployer-import-'));
-        const zipPath = path.join(tempDir, `${selected_deployment.database_prefix}_backup.zip`);
+        const zipPath = path.join(tempDir, `${deployment.database_prefix}_backup.zip`);
         const fileStream = fs.createWriteStream(zipPath);
 
         await finished(Readable.fromWeb(exportResponse.body).pipe(fileStream));
@@ -296,7 +297,7 @@ export async function triggerImport() {
         const formattedDate = new Date().toISOString().replaceAll(':', '-').split('.')[0];
 
         const backupDir = path.join(
-            getDeploymentBackupDir(selected_deployment, true),
+            getDeploymentBackupDir(deployment, true),
             `${formattedDate}_remote`
         );
         if (!fs.existsSync(backupDir)) {
@@ -314,18 +315,18 @@ export async function triggerImport() {
                 continue;
             }
 
-            if (file.startsWith(`${selected_deployment.database_prefix}_main`)) {
+            if (file.startsWith(`${deployment.database_prefix}_main`)) {
                 mainFiles.push(path.join(backupDir, file));
             }
 
-            if (file.startsWith(`${selected_deployment.database_prefix}_comp`)) {
+            if (file.startsWith(`${deployment.database_prefix}_comp`)) {
                 compFiles.push(path.join(backupDir, file));
             }
         }
     } else if (importSource === 'local-backup') {
-        const deploymentBackupDir = getDeploymentBackupDir(selected_deployment, false);
+        const deploymentBackupDir = getDeploymentBackupDir(deployment, false);
         if (!deploymentBackupDir) {
-            console.error(chalk.red(`[DEPLOYER] No backups found for deployment "${selected_deployment.title}"`));
+            console.error(chalk.red(`[DEPLOYER] No backups found for deployment "${deployment.title}"`));
             return;
         }
 
@@ -349,28 +350,28 @@ export async function triggerImport() {
                 continue;
             }
 
-            if (file.startsWith(`${selected_deployment.database_prefix}_main`)) {
+            if (file.startsWith(`${deployment.database_prefix}_main`)) {
                 mainFiles.push(path.join(backupDirPath, file));
             }
 
-            if (file.startsWith(`${selected_deployment.database_prefix}_comp`)) {
+            if (file.startsWith(`${deployment.database_prefix}_comp`)) {
                 compFiles.push(path.join(backupDirPath, file));
             }
         }
     } else if (importSource === 'local-sql') {
         console.log(" ");
-        console.log(chalk.yellow(`[INFO] Make sure each SQL dump file has the database prefix of '${selected_deployment.database_prefix}'`));
+        console.log(chalk.yellow(`[INFO] Make sure each SQL dump file has the database prefix of '${deployment.database_prefix}'`));
 
         const answers = await inquirer.prompt([
             {
                 type: 'input',
                 name: 'mainDBFile',
-                message: `Path to SQL dump for ${selected_deployment.database_prefix}_main:`,
+                message: `Path to SQL dump for ${deployment.database_prefix}_main:`,
             },
             {
                 type: 'input',
                 name: 'compDBFile',
-                message: `Path to SQL dump for ${selected_deployment.database_prefix}_comp:`,
+                message: `Path to SQL dump for ${deployment.database_prefix}_comp:`,
             }
         ]);
 
@@ -408,10 +409,10 @@ export async function triggerImport() {
 
     console.log("\n");
 
-    console.log(chalk.blue(`[DEPLOYER] Importing databases to ${selected_deployment.title}...`))
-    const [importFailed, importLog] = await runImportDatabases(selected_deployment, mainFiles, compFiles);
+    console.log(chalk.blue(`[DEPLOYER] Importing databases to ${deployment.title}...`))
+    const [importFailed, importLog] = await runImportDatabases(deployment, mainFiles, compFiles);
     if (importFailed) {
-        console.error(chalk.red(`[DEPLOYER] Failed to import databases to ${selected_deployment.title}`));
+        console.error(chalk.red(`[DEPLOYER] Failed to import databases to ${deployment.title}`));
         return;
     }
 
@@ -426,35 +427,35 @@ export async function triggerImport() {
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
 export async function triggerMigrate() {
     const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-    let selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
+    let deployment = deployments_info[Object.keys(deployments_info)[0]];
 
     // if deployment is not specified, set selected deployment to first deployment in deployments.json
     if (process.argv[process.argv.indexOf('migrate') + 1] !== undefined) {
-        const deployment = process.argv[process.argv.indexOf('migrate') + 1];
-        const deployment_info = deployments_info[deployment];
+        const deploymentArg = process.argv[process.argv.indexOf('migrate') + 1];
+        const deployment_info = deployments_info[deploymentArg];
 
         if (deployment_info) {
-            selected_deployment = deployment_info;
+            deployment = deployment_info;
         } else {
-            console.error(`Deployment ${deployment} not found in deployments.json`);
+            console.error(`Deployment ${deploymentArg} not found in deployments.json`);
             return;
         }
     }
 
-    console.log(`Running migrations on ${selected_deployment.title}...`)
+    console.log(`Running migrations on ${deployment.title}...`)
     const [migrateFailed, migrateLog] = await runDatabaseMigrations(
-        selected_deployment,
-        !selected_deployment.backup,
-        selected_deployment.no_composer_dev || false,
+        deployment,
+        !deployment.backup,
+        deployment.no_composer_dev || false,
     );
 
     if (migrateFailed) {
-        console.error(`Failed to run migrations on ${selected_deployment.title}`);
+        console.error(`Failed to run migrations on ${deployment.title}`);
         return;
     }
 
-    console.log(`Rebuilding views on ${selected_deployment.title}...`)
-    await rebuildViews(selected_deployment);
+    console.log(`Rebuilding views on ${deployment.title}...`)
+    await rebuildViews(deployment);
     console.log(`\n\nDone!`)
 }
 
@@ -465,23 +466,23 @@ export async function triggerMigrate() {
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
 export async function triggerRebuildViews() {
     const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-    let selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
+    let deployment = deployments_info[Object.keys(deployments_info)[0]];
 
     // if deployment is not specified, set selected deployment to first deployment in deployments.json
     if (process.argv[process.argv.indexOf('rebuildViews') + 1] !== undefined) {
-        const deployment = process.argv[process.argv.indexOf('rebuildViews') + 1];
-        const deployment_info = deployments_info[deployment];
+        const deploymentArg = process.argv[process.argv.indexOf('rebuildViews') + 1];
+        const deployment_info = deployments_info[deploymentArg];
 
         if (deployment_info) {
-            selected_deployment = deployment_info;
+            deployment = deployment_info;
         } else {
-            console.error(`Deployment ${deployment} not found in deployments.json`);
+            console.error(`Deployment ${deploymentArg} not found in deployments.json`);
             return;
         }
     }
 
-    console.log(`Rebuilding views on ${selected_deployment.title}...`)
-    await rebuildViews(selected_deployment);
+    console.log(`Rebuilding views on ${deployment.title}...`)
+    await rebuildViews(deployment);
 }
 
 // npm run anonymise (deployment)
@@ -491,23 +492,23 @@ export async function triggerRebuildViews() {
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
 export async function triggerAnonymise() {
     const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-    let selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
+    let deployment = deployments_info[Object.keys(deployments_info)[0]];
 
     // if deployment is not specified, set selected deployment to first deployment in deployments.json
     if (process.argv[process.argv.indexOf('anonymise') + 1] !== undefined) {
-        const deployment = process.argv[process.argv.indexOf('anonymise') + 1];
-        const deployment_info = deployments_info[deployment];
+        const deploymentArg = process.argv[process.argv.indexOf('anonymise') + 1];
+        const deployment_info = deployments_info[deploymentArg];
 
         if (deployment_info) {
-            selected_deployment = deployment_info;
+            deployment = deployment_info;
         } else {
-            console.error(`Deployment ${deployment} not found in deployments.json`);
+            console.error(`Deployment ${deploymentArg} not found in deployments.json`);
             return;
         }
     }
 
-    console.log(`Anonymising ${selected_deployment.title}...`)
-    await anonymiseDatabase(selected_deployment);
+    console.log(`Anonymising ${deployment.title}...`)
+    await anonymiseDatabase(deployment);
 }
 
 // npm run syncDatabases (deployment)
@@ -528,23 +529,23 @@ export async function triggerSyncDatabases() {
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
 export async function triggerRebuildUsers() {
     const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-    let selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
+    let deployment = deployments_info[Object.keys(deployments_info)[0]];
 
     // if deployment is not specified, set selected deployment to first deployment in deployments.json
     if (process.argv[process.argv.indexOf('rebuildUsers') + 1] !== undefined) {
-        const deployment = process.argv[process.argv.indexOf('rebuildUsers') + 1];
-        const deployment_info = deployments_info[deployment];
+        const deploymentArg = process.argv[process.argv.indexOf('rebuildUsers') + 1];
+        const deployment_info = deployments_info[deploymentArg];
 
         if (deployment_info) {
-            selected_deployment = deployment_info;
+            deployment = deployment_info;
         } else {
-            console.error(`Deployment ${deployment} not found in deployments.json`);
+            console.error(`Deployment ${deploymentArg} not found in deployments.json`);
             return;
         }
     }
 
-    console.log(`Recreating Users for ${selected_deployment.title}...`)
-    await rebuildUsers(selected_deployment);
+    console.log(`Recreating Users for ${deployment.title}...`)
+    await rebuildUsers(deployment);
 }
 
 // npm run rebuildForeignKeys (deployment)
@@ -554,23 +555,23 @@ export async function triggerRebuildUsers() {
 //   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
 export async function triggerRebuildForeignKeys() {
     const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-    let selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
+    let deployment = deployments_info[Object.keys(deployments_info)[0]];
 
     // if deployment is not specified, set selected deployment to first deployment in deployments.json
     if (process.argv[process.argv.indexOf('rebuildForeignKeys') + 1] !== undefined) {
-        const deployment = process.argv[process.argv.indexOf('rebuildForeignKeys') + 1];
-        const deployment_info = deployments_info[deployment];
+        const deploymentArg = process.argv[process.argv.indexOf('rebuildForeignKeys') + 1];
+        const deployment_info = deployments_info[deploymentArg];
 
         if (deployment_info) {
-            selected_deployment = deployment_info;
+            deployment = deployment_info;
         } else {
-            console.error(`Deployment ${deployment} not found in deployments.json`);
+            console.error(`Deployment ${deploymentArg} not found in deployments.json`);
             return;
         }
     }
 
-    console.log(`Recreating foreign keys for ${selected_deployment.title}...`)
-    await rebuildForeignKeys(selected_deployment);
+    console.log(`Recreating foreign keys for ${deployment.title}...`)
+    await rebuildForeignKeys(deployment);
 }
 
 // npm run build (deployment)
@@ -586,23 +587,23 @@ export async function triggerNPM() {
     if (process.argv.includes('publish')) { selected_cmd = 'publish'; }
 
     const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-    let selected_deployment = deployments_info[Object.keys(deployments_info)[0]];
+    let deployment = deployments_info[Object.keys(deployments_info)[0]];
 
     // if deployment is not specified, set selected deployment to first deployment in deployments.json
     if (process.argv[process.argv.indexOf(selected_cmd) + 1] !== undefined) {
-        const deployment = process.argv[process.argv.indexOf(selected_cmd) + 1];
-        const deployment_info = deployments_info[deployment];
+        const deploymentArg = process.argv[process.argv.indexOf(selected_cmd) + 1];
+        const deployment_info = deployments_info[deploymentArg];
 
         if (deployment_info) {
-            selected_deployment = deployment_info;
+            deployment = deployment_info;
         } else {
-            console.error(`Deployment ${deployment} not found in deployments.json`);
+            console.error(`Deployment ${deploymentArg} not found in deployments.json`);
             return;
         }
     }
 
-    console.log(`Installing NPM dependencies and running ${selected_cmd} script for ${selected_deployment.title}...`)
-    await rebuildNPM(selected_deployment, selected_cmd);
+    console.log(`Installing NPM dependencies and running ${selected_cmd} script for ${deployment.title}...`)
+    await rebuildNPM(deployment, selected_cmd);
 }
 
 require('make-runnable/custom')({

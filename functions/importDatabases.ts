@@ -7,6 +7,7 @@ import { rebuildForeignKeys } from './rebuildForeignKeys';
 import { runDatabaseMigrations } from './migrate';
 import { setMaintenanceMode } from './docker';
 import { writeLog } from './logging';
+import type { Deployment } from './deployment';
 
 /**
  * Import databases from SQL dump files
@@ -17,7 +18,7 @@ import { writeLog } from './logging';
  * @param {string[]} filePathsComp - path(s) to the comp databases dump file(s), should match the main dump so that migrations work correctly
  * @returns {Promise<[boolean, string]>} - [importFailed, importLog]
  */
-async function importDatabases(deployment, filePathsMain, filePathsComp) {
+async function importDatabases(deployment: Deployment, filePathsMain: string[], filePathsComp: string[]): Promise<[boolean, string]> {
     let importLog = "";
     let importFailed = false;
     try {
@@ -137,7 +138,7 @@ async function importDatabases(deployment, filePathsMain, filePathsComp) {
     return [importFailed, importLog]
 }
 
-export async function runImportDatabases(deployment, filePathsMain, filePathsComp) {
+export async function runImportDatabases(deployment: Deployment, filePathsMain: string[], filePathsComp: string[]) {
     console.log(`[IMPORT] IMPORTING DATABASES TO ${deployment.title}`);
     let importLog = `--- IMPORTING DATABASES TO ${deployment.title} ---`;
 

@@ -12,8 +12,9 @@ import {
     getDeploymentTags,
     deploymentHasUncommittedChanges,
     getCurrentBranch,
-    checkoutDeploymentTo
+    checkoutDeploymentTo,
 } from './deployment';
+import type { Deployment } from './deployment';
 
 /**
  * Create a temporary directory with a copy of all migration files in the updates folder
@@ -54,19 +55,19 @@ function isDeploymentVersionCompatible(minVersion, deploymentVersion) {
 }
 
 
-export async function runDatabaseMigrations(selected_deployment, skipBackup, no_composer_dev) {
+export async function runDatabaseMigrations(deployment: Deployment, skipBackup, no_composer_dev) {
     let hasFailed = false;
     let migrationLog = '';
 
-    const deploymentVersion = getDeploymentVersion(selected_deployment);
-    const deploymentTags = await getDeploymentTags(selected_deployment);
+    const deploymentVersion = getDeploymentVersion(deployment);
+    const deploymentTags = await getDeploymentTags(deployment);
 
 
 
     console.log('[MIGRATE] Ensuring composer dependencies are up to date...');
     migrationLog += '\n[MIGRATE] Ensuring composer dependencies are up to date...';
 
-    const [hasComposerFailed, composerLog] = await runComposer(selected_deployment, no_composer_dev);
+    const [hasComposerFailed, composerLog] = await runComposer(deployment, no_composer_dev);
     migrationLog += composerLog;
     if (hasComposerFailed) {
         console.error('[MIGRATE] Error running composer install');
@@ -99,7 +100,7 @@ export async function runDatabaseMigrations(selected_deployment, skipBackup, no_
      *             [order]-[comp/main]-[name].sql
      *             ...
     */
-    const updatesDir = path.join(selected_deployment.path, selected_deployment.migration_folder);
+    const updatesDir = path.join(deployment.path, deployment.migration_folder);
 
     const allMigrations = {};
 
@@ -198,7 +199,7 @@ export async function runDatabaseMigrations(selected_deployment, skipBackup, no_
         host: process.env.DB_HOST,
         user: process.env.DB_USER,
         password: process.env.DB_PASSWORD,
-        database: `${selected_deployment.database_prefix}_main`,
+        database: `${deployment.database_prefix}_main`,
     });
 
     const connectMain = util.promisify(connectionMain.connect.bind(connectionMain));
@@ -212,8 +213,8 @@ export async function runDatabaseMigrations(selected_deployment, skipBackup, no_
         connectionMain.end();
     });
     if (hasFailed) { return [hasFailed, migrationLog]; }
-    console.log(`[MIGRATE] Successfully connected to database ${selected_deployment.database_prefix}_main`);
-    migrationLog += `\n[MIGRATE] Successfully connected to database ${selected_deployment.database_prefix}_main`;
+    console.log(`[MIGRATE] Successfully connected to database ${deployment.database_prefix}_main`);
+    migrationLog += `\n[MIGRATE] Successfully connected to database ${deployment.database_prefix}_main`;
 
     // Read the updates table to get a list of migrations that have already been run
     const ranMigrations = await queryMain('SELECT update_name FROM updates').catch((err) => {
@@ -283,7 +284,7 @@ export async function runDatabaseMigrations(selected_deployment, skipBackup, no_
     const migrationsOutsideCurrentRelease = Object.keys(newMigrations).filter(release => release !== deploymentVersion);
     if (
         migrationsOutsideCurrentRelease.length > 0
-        && await deploymentHasUncommittedChanges(selected_deployment)
+        && await deploymentHasUncommittedChanges(deployment)
     ) {
         const failMessage = `[MIGRATE] Unable to proceed: Uncommitted changes in deployment directory and migrations outside current release`
             + `\n   - You are currently on: ${deploymentVersion}`
@@ -298,7 +299,7 @@ export async function runDatabaseMigrations(selected_deployment, skipBackup, no_
 
     // Create a full backup before proceeding with any migration
     if (!skipBackup) {
-        const { hasFailed: hasBackupFailed, backupLog } = await createDatabaseBackup(selected_deployment);
+        const { hasFailed: hasBackupFailed, backupLog } = await createDatabaseBackup(deployment);
         migrationLog += backupLog;
         if (hasBackupFailed) {
             console.error('[MIGRATE] Error creating full backup before running migrations');
@@ -312,8 +313,8 @@ export async function runDatabaseMigrations(selected_deployment, skipBackup, no_
     console.log('[MIGRATE] Dropping views...');
     migrationLog += '\n[MIGRATE] Dropping views...';
 
-    const compDatabasesV = await queryMain(`SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE '${selected_deployment.database_prefix}_comp_%'`);
-    const databasesToDropViews = [`${selected_deployment.database_prefix}_main`, ...compDatabasesV.map(db => db.SCHEMA_NAME)];
+    const compDatabasesV = await queryMain(`SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE '${deployment.database_prefix}_comp_%'`);
+    const databasesToDropViews = [`${deployment.database_prefix}_main`, ...compDatabasesV.map(db => db.SCHEMA_NAME)];
 
     for (const database of databasesToDropViews) {
         const dropViewsQuery = 'SELECT CONCAT("DROP VIEW ", TABLE_SCHEMA, ".", TABLE_NAME, ";") AS query FROM information_schema.VIEWS WHERE TABLE_SCHEMA = ?';
@@ -327,7 +328,7 @@ export async function runDatabaseMigrations(selected_deployment, skipBackup, no_
     migrationLog += '\n[MIGRATE] Views dropped, proceeding with migrations...';
 
     // Run the migrations
-    const initialBranch = await getCurrentBranch(selected_deployment);
+    const initialBranch = await getCurrentBranch(deployment);
     let currentReleaseTag = deploymentVersion;
     let tempUpdatesDirPath = null; // used if we need to switch tags, so we can still run the original migrations
     console.log(`[MIGRATE] Deployment is currently on release ${currentReleaseTag} (at ${initialBranch})`);
@@ -355,7 +356,7 @@ export async function runDatabaseMigrations(selected_deployment, skipBackup, no_
                 migrationLog += `\n[MIGRATE] Created temporary directory with migration files: ${tempUpdatesDirPath}`;
             }
 
-            await checkoutDeploymentTo(selected_deployment, targetToCheckout).catch((err) => {
+            await checkoutDeploymentTo(deployment, targetToCheckout).catch((err) => {
                 console.error('[MIGRATE] Error switching to tag:', err.message);
                 migrationLog += '\n[MIGRATE] Error switching to tag: ' + err.message;
                 hasFailed = true;
@@ -432,14 +433,14 @@ export async function runDatabaseMigrations(selected_deployment, skipBackup, no_
 
                     if (isMainMigration) {
                         // Run the migration file on the main database
-                        await runSQLMigration(`${selected_deployment.database_prefix}_main`).catch((err) => {
+                        await runSQLMigration(`${deployment.database_prefix}_main`).catch((err) => {
                             console.error('[MIGRATE] Error running main migration:', err?.message || err);
                             migrationLog += '\n[MIGRATE] Error running main migration: ' + (err?.message || err);
                             hasFailed = true;
                         });
                     } else if (isCompMigration) {
                         // Retrieve the list of comp databases
-                        const compDatabases = await queryMain(`SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE '${selected_deployment.database_prefix}_comp_%'`);
+                        const compDatabases = await queryMain(`SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE '${deployment.database_prefix}_comp_%'`);
 
                         for (const compDb of compDatabases) {
                             const dbName = compDb.SCHEMA_NAME;
@@ -458,7 +459,7 @@ export async function runDatabaseMigrations(selected_deployment, skipBackup, no_
                             const migrateCmd = spawn(process.env.PHP_PATH, [
                                 migrationFilePath
                             ], {
-                                cwd: selected_deployment.path,
+                                cwd: deployment.path,
                                 shell: true
                             });
 
@@ -525,7 +526,7 @@ export async function runDatabaseMigrations(selected_deployment, skipBackup, no_
         console.log(`[MIGRATE] Switching back to branch ${initialBranch}...`);
         migrationLog += `\n[MIGRATE] Switching back to branch ${initialBranch}...`;
 
-        await checkoutDeploymentTo(selected_deployment, initialBranch).catch((err) => {
+        await checkoutDeploymentTo(deployment, initialBranch).catch((err) => {
             console.error('[MIGRATE] Error switching back to branch:', err.message);
             migrationLog += '\n[MIGRATE] Error switching back to branch: ' + err.message;
             hasFailed = true;

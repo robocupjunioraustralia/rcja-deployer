@@ -3,8 +3,9 @@ import path from "path";
 import mysql from 'mysql';
 import fs from 'fs';
 import { spawn } from 'child_process';
+import type { Deployment } from './deployment';
 
-export function getDeploymentBackupDir(selected_deployment, makeIfMissing) {
+export function getDeploymentBackupDir(deployment: Deployment, makeIfMissing: boolean) {
     const backupFolder = path.join(__dirname, '../backups');
     if (!fs.existsSync(backupFolder)) {
         if (!makeIfMissing) {
@@ -13,7 +14,7 @@ export function getDeploymentBackupDir(selected_deployment, makeIfMissing) {
         fs.mkdirSync(backupFolder);
     }
 
-    const deploymentBackupFolder = path.join(backupFolder, selected_deployment.database_prefix);
+    const deploymentBackupFolder = path.join(backupFolder, deployment.database_prefix);
     if (!fs.existsSync(deploymentBackupFolder)) {
         if (!makeIfMissing) {
             return null;
@@ -24,14 +25,14 @@ export function getDeploymentBackupDir(selected_deployment, makeIfMissing) {
     return deploymentBackupFolder;
 }
 
-export async function createDatabaseBackup(selected_deployment, join_comps = false, suffix = "") {
+export async function createDatabaseBackup(deployment: Deployment, join_comps = false, suffix = "") {
     let hasFailed = false;
     let backupLog = '\n\n[BACKUP] Running database backup...';
     console.log('[BACKUP] Running database backup...')
 
     // Create backup folder with current date
     const backupName = new Date().toISOString().replaceAll(':', '-').split('.')[0] + suffix;
-    const backupDir = path.join(getDeploymentBackupDir(selected_deployment, true), backupName);
+    const backupDir = path.join(getDeploymentBackupDir(deployment, true), backupName);
     if (!fs.existsSync(backupDir)) {
         fs.mkdirSync(backupDir);
     }
@@ -77,7 +78,7 @@ export async function createDatabaseBackup(selected_deployment, join_comps = fal
         host: process.env.DB_HOST,
         user: process.env.DB_USER,
         password: process.env.DB_PASSWORD,
-        database: `${selected_deployment.database_prefix}_main`,
+        database: `${deployment.database_prefix}_main`,
     });
 
     const connectMain = util.promisify(connectionMain.connect.bind(connectionMain));
@@ -91,8 +92,8 @@ export async function createDatabaseBackup(selected_deployment, join_comps = fal
         connectionMain.end();
     });
     if (hasFailed) { return { hasFailed, backupLog, backupName, backupDir, backupFiles }; }
-    console.log(`[BACKUP] Successfully connected to database ${selected_deployment.database_prefix}_main`);
-    backupLog += `\n[BACKUP] Successfully connected to database ${selected_deployment.database_prefix}_main`;
+    console.log(`[BACKUP] Successfully connected to database ${deployment.database_prefix}_main`);
+    backupLog += `\n[BACKUP] Successfully connected to database ${deployment.database_prefix}_main`;
 
     // Read the comps table to get a list of all comps
     const allComps = await queryMain('SELECT uid FROM comps').catch((err) => {
@@ -108,19 +109,19 @@ export async function createDatabaseBackup(selected_deployment, join_comps = fal
     const backupFiles = [];
 
     // Backup rcj_cms_main database
-    const mainDbBackupName = `${selected_deployment.database_prefix}_main.sql`;
+    const mainDbBackupName = `${deployment.database_prefix}_main.sql`;
     const mainDbBackupFile = path.join(backupDir, mainDbBackupName);
     const mainDbWstream = fs.createWriteStream(mainDbBackupFile);
 
     backupFiles.push(mainDbBackupFile);
 
     await createMySQLDump(
-        [`${selected_deployment.database_prefix}_main`],
-        `${selected_deployment.database_prefix}_main`,
+        [`${deployment.database_prefix}_main`],
+        `${deployment.database_prefix}_main`,
         mainDbWstream
     ).catch((err) => {
-        console.error(`[BACKUP] Error creating database backup for ${selected_deployment.database_prefix}_main:`, err);
-        backupLog += `\n[BACKUP] Error creating database backup for ${selected_deployment.database_prefix}_main: ${err}`;
+        console.error(`[BACKUP] Error creating database backup for ${deployment.database_prefix}_main:`, err);
+        backupLog += `\n[BACKUP] Error creating database backup for ${deployment.database_prefix}_main: ${err}`;
         hasFailed = true;
     });
     mainDbWstream.close();
@@ -128,19 +129,19 @@ export async function createDatabaseBackup(selected_deployment, join_comps = fal
 
     if (join_comps) {
         // Backup all comp databases into a single file
-        const compDbsBackupName = `${selected_deployment.database_prefix}_comp.sql`;
+        const compDbsBackupName = `${deployment.database_prefix}_comp.sql`;
         const compDbsBackupFile = path.join(backupDir, compDbsBackupName);
         const compDbsWstream = fs.createWriteStream(compDbsBackupFile);
 
         backupFiles.push(compDbsBackupFile);
 
         await createMySQLDump(
-            allComps.map(comp => `${selected_deployment.database_prefix}_comp_${comp.uid}`),
-            `${selected_deployment.database_prefix}_comp_*`,
+            allComps.map(comp => `${deployment.database_prefix}_comp_${comp.uid}`),
+            `${deployment.database_prefix}_comp_*`,
             compDbsWstream
         ).catch((err) => {
-            console.error(`[BACKUP] Error creating database backup for ${selected_deployment.database_prefix}_comp_*`, err);
-            backupLog += `\n[BACKUP] Error creating database backup for ${selected_deployment.database_prefix}_comp_*: ${err}`;
+            console.error(`[BACKUP] Error creating database backup for ${deployment.database_prefix}_comp_*`, err);
+            backupLog += `\n[BACKUP] Error creating database backup for ${deployment.database_prefix}_comp_*: ${err}`;
             hasFailed = true;
         });
         compDbsWstream.close();
@@ -150,7 +151,7 @@ export async function createDatabaseBackup(selected_deployment, join_comps = fal
         for (const comp of allComps) {
             const uid = comp.uid;
 
-            const dbName = `${selected_deployment.database_prefix}_comp_${uid}`;
+            const dbName = `${deployment.database_prefix}_comp_${uid}`;
             const backupName = `${dbName}.sql`;
             const backupFile = path.join(backupDir, backupName);
             const wstream = fs.createWriteStream(backupFile);

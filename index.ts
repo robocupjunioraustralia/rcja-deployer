@@ -19,6 +19,7 @@ import { writeLog } from './functions/logging';
 import { rebuildViews } from './functions/rebuildViews';
 import { rebuildNPM } from './functions/rebuildNPM';
 import { createDatabaseBackup, getDeploymentBackupDir } from "./functions/backup";
+import type { Deployment } from "./functions/deployment";
 
 dotenv.config();
 
@@ -157,7 +158,7 @@ app.post('/deploy', async (req, res) => {
     return res.status(401).send('Unauthorized');
   }
 
-  const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
+  const deployments_info: Record<string, Deployment> = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
 
   // Find the repository in deployments.json
   const valid_deployments = Object.values(deployments_info).filter(d => d.repository === req.body.repository.full_name);
@@ -168,19 +169,19 @@ app.post('/deploy', async (req, res) => {
   console.log(`[DEPLOYER] Received change on ${req.body.repository.full_name}...`)
 
   // Check that the branch being pushed to is the master branch
-  const selected_deployment = valid_deployments.find(d => d.branch_ref === req.body.ref);
-  if (!selected_deployment) {
+  const deployment = valid_deployments.find(d => d.branch_ref === req.body.ref);
+  if (!deployment) {
     console.log(`[DEPLOYER] The branch ${req.body.ref} does not match a deployment config. Not deploying.`);
     return res.status(200).send('OK');
   }
 
-  console.log(`[DEPLOYER] Deploying ${req.body.repository.full_name} (${req.body.ref}) to ${selected_deployment.title}...`);
-  let deployLog = `--- Deploying ${req.body.repository.full_name} (${req.body.ref}) to ${selected_deployment.title} ---\n`;
+  console.log(`[DEPLOYER] Deploying ${req.body.repository.full_name} (${req.body.ref}) to ${deployment.title}...`);
+  let deployLog = `--- Deploying ${req.body.repository.full_name} (${req.body.ref}) to ${deployment.title} ---\n`;
 
-  setMaintenanceMode(selected_deployment, true);
+  setMaintenanceMode(deployment, true);
   deployLog += `Deployment started on ${new Date().toISOString()}\n\n`;
   // Execute the shell script to pull the latest changes from the branch
-  exec(`cd ${selected_deployment.path} && ${selected_deployment.pull_cmd}`, async (err, stdout, stderr) => {
+  exec(`cd ${deployment.path} && ${deployment.pull_cmd}`, async (err, stdout, stderr) => {
     if (err) {
       console.error(err);
       deployLog += `--- Error while pulling changes ---\n${err}\n${stderr}\n`;
@@ -195,7 +196,7 @@ app.post('/deploy', async (req, res) => {
     // Update NPM packages and rebuild assets
     console.log('[DEPLOY] Updating NPM packages and rebuilding assets...')
     deployLog += "\n--- RUNNING NPM COMMANDS ---\n";
-    const [npmFailed, npmLog] = await rebuildNPM(selected_deployment);
+    const [npmFailed, npmLog] = await rebuildNPM(deployment);
     console.log("[DEPLOY] NPM commands complete: ", npmFailed ? "FAIL" : "SUCCESS");
     deployLog += npmLog;
     deployLog += `\n\n--- NPM COMMANDS: ${npmFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
@@ -204,9 +205,9 @@ app.post('/deploy', async (req, res) => {
     console.log('[DEPLOY] Running database migrations...')
     deployLog += "\n--- RUNNING DATABASE MIGRATIONS ---\n";
     const [migrateFailed, migrateLog] = await runDatabaseMigrations(
-      selected_deployment,
-      !selected_deployment.backup,
-      selected_deployment.no_composer_dev || false
+      deployment,
+      !deployment.backup,
+      deployment.no_composer_dev || false
     );
     console.log("[DEPLOY] Migration complete: ", migrateFailed ? "FAIL" : "SUCCESS");
     deployLog += migrateLog;
@@ -220,7 +221,7 @@ app.post('/deploy', async (req, res) => {
     // Rebuild the views
     console.log('[SYNC] Rebuilding views...')
     deployLog += "\n--- REBUILDING VIEWS ---\n";
-    const [rebuildFailed, rebuildLog] = await rebuildViews(selected_deployment);
+    const [rebuildFailed, rebuildLog] = await rebuildViews(deployment);
     console.log("[SYNC] View rebuild complete: ", rebuildFailed ? "FAIL" : "SUCCESS");
     deployLog += rebuildLog;
     deployLog += `\n\n--- REBUILDING VIEWS: ${rebuildFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
@@ -233,34 +234,34 @@ app.post('/deploy', async (req, res) => {
 
     writeLog(deployLog, true, "deploy");
     res.status(200).send('OK');
-    setMaintenanceMode(selected_deployment, false);
+    setMaintenanceMode(deployment, false);
   });
 });
 
 async function canExport(req, res, next) {
   const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-  const selected_deployment = deployments_info[req.params.deployment_id] ?? null;
-  if (!selected_deployment) {
+  const deployment = deployments_info[req.params.deployment_id] ?? null;
+  if (!deployment) {
     return res.sendStatus(403);
   }
 
-  if (!selected_deployment.export) {
+  if (!deployment.export) {
     return res.sendStatus(403); // Exporting not enabled for this deployment
   }
 
   const requestIp = req.ip.replace('::ffff:', '');
-  if (!selected_deployment.export.allowed_ips.includes(requestIp)) {
-    console.log(`[EXPORT] Request from IP "${requestIp}" not allowed for deployment "${selected_deployment.title}"`);
+  if (!deployment.export.allowed_ips.includes(requestIp)) {
+    console.log(`[EXPORT] Request from IP "${requestIp}" not allowed for deployment "${deployment.title}"`);
     return res.sendStatus(403);
   }
 
   const authHeader = req.headers.authorization;
-  if (!authHeader || authHeader.split(" ")[1] !== selected_deployment.export.secret) {
-    console.log(`[EXPORT] Invalid secret for deployment "${selected_deployment.title}" from IP "${req.ip}"`);
+  if (!authHeader || authHeader.split(" ")[1] !== deployment.export.secret) {
+    console.log(`[EXPORT] Invalid secret for deployment "${deployment.title}" from IP "${req.ip}"`);
     return res.sendStatus(403);
   }
 
-  req.selected_deployment = selected_deployment;
+  req.deployment = deployment;
   next();
 }
 
@@ -293,14 +294,14 @@ function cleanupExports() {
 }
 
 app.post('/export/:deployment_id', canExport, async (req, res) => {
-  const selected_deployment = req.selected_deployment;
+  const deployment = req.deployment;
 
-  console.log(`[DEPLOYER] Creating backup for ${selected_deployment.title}...`);
-  let exportLog = `--- Creating backup for ${selected_deployment.title} ---\n`;
+  console.log(`[DEPLOYER] Creating backup for ${deployment.title}...`);
+  let exportLog = `--- Creating backup for ${deployment.title} ---\n`;
 
   cleanupExports();
 
-  const { hasFailed: backupFailed, backupLog, backupName, backupFiles } = await createDatabaseBackup(selected_deployment, false, "_export");
+  const { hasFailed: backupFailed, backupLog, backupName, backupFiles } = await createDatabaseBackup(deployment, false, "_export");
   exportLog += backupLog;
 
   console.log(`[DEPLOYER] Backup complete: `, backupFailed ? "FAIL" : "SUCCESS");
@@ -319,11 +320,11 @@ app.post('/export/:deployment_id', canExport, async (req, res) => {
 });
 
 app.get('/export/:deployment_id/:backup_name', canExport, async (req, res) => {
-  const selected_deployment = req.selected_deployment;
+  const deployment = req.deployment;
 
-  const deploymentBackupDir = getDeploymentBackupDir(selected_deployment, false);
+  const deploymentBackupDir = getDeploymentBackupDir(deployment, false);
   if (!deploymentBackupDir) {
-    return res.status(404).send(`No backups found for deployment "${selected_deployment.title}"`);
+    return res.status(404).send(`No backups found for deployment "${deployment.title}"`);
   }
 
   let backupName = req.params.backup_name;
@@ -333,7 +334,7 @@ app.get('/export/:deployment_id/:backup_name', canExport, async (req, res) => {
       .map((d) => d.name);
 
     if (existingBackups.length === 0) {
-      return res.status(404).send(`No backups found for deployment "${selected_deployment.title}"`);
+      return res.status(404).send(`No backups found for deployment "${deployment.title}"`);
     }
 
     backupName = existingBackups.sort().reverse()[0];
@@ -341,7 +342,7 @@ app.get('/export/:deployment_id/:backup_name', canExport, async (req, res) => {
 
   const backupDir = path.join(deploymentBackupDir, backupName);
   if (!fs.existsSync(backupDir)) {
-    return res.status(404).send(`Unable to find backup "${backupName}" for deployment "${selected_deployment.title}"`);
+    return res.status(404).send(`Unable to find backup "${backupName}" for deployment "${deployment.title}"`);
   }
 
   const backupFiles = fs.readdirSync(backupDir)
@@ -353,7 +354,7 @@ app.get('/export/:deployment_id/:backup_name', canExport, async (req, res) => {
   let exportLog = `[EXPORT] Creating zip of backup ${backupName}...\n`;
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rcja-deployer-export-'));
-  const zipName = `${selected_deployment.database_prefix}_${backupName}_backup.zip`;
+  const zipName = `${deployment.database_prefix}_${backupName}_backup.zip`;
   const zipPath = path.join(tempDir, zipName);
   const output = fs.createWriteStream(zipPath);
 

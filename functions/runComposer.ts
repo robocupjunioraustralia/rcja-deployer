@@ -1,7 +1,8 @@
 import path from "path";
 import { spawn } from 'child_process';
+import type { Deployment } from "./deployment";
 
-export async function runComposer(selected_deployment, noDev) {
+export async function runComposer(deployment: Deployment, noDev) {
     let hasFailed = false;
     let composerLog = '\n\n[COMPOSER] Running composer install...';
     console.log('[COMPOSER] Running composer install...');
@@ -13,7 +14,7 @@ export async function runComposer(selected_deployment, noDev) {
                 composerOpts.push('--no-dev');
             }
             const composer = spawn(process.env.COMPOSER_PATH, composerOpts, {
-                cwd: path.join(selected_deployment.path),
+                cwd: path.join(deployment.path),
                 shell: true
             });
             composer.stdout.on('data', (data) => {

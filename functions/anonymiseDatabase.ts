@@ -1,8 +1,9 @@
 import mariadb from 'mariadb';
 import phppass from "node-php-password";
 import { faker } from '@faker-js/faker';
+import type { Deployment } from './deployment';
 
-export async function anonymiseDatabase(deploymentInfo) {
+export async function anonymiseDatabase(deployment: Deployment) {
     let anonFailed = false;
     let anonLog = "";
 
@@ -29,7 +30,7 @@ export async function anonymiseDatabase(deploymentInfo) {
         }
 
         // Retrieve the list of comp databases
-        const compDatabases = await conn.query(`SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE '${deploymentInfo.database_prefix}_comp_%'`);
+        const compDatabases = await conn.query(`SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE '${deployment.database_prefix}_comp_%'`);
 
         const importedMentorCache = await conn.query(`SELECT * FROM rcj_cms_deployer_cache.imported_mentor`);
         const importedTeamMemberCache = await conn.query(`SELECT * FROM rcj_cms_deployer_cache.imported_team_member`);
@@ -38,7 +39,7 @@ export async function anonymiseDatabase(deploymentInfo) {
         // Iterate over each comp database and anonymize the data in the imported_mentor and imported_team_member tables
         for (const compDb of compDatabases) {
             const dbName = compDb.SCHEMA_NAME;
-            const compId = dbName.replace(`${deploymentInfo.database_prefix}_comp_`, '');
+            const compId = dbName.replace(`${deployment.database_prefix}_comp_`, '');
 
             console.log(`[ANONYMISE] Anonymizing data in ${dbName}`);
             anonLog += `\n[ANONYMISE] Anonymizing data in ${dbName}`;

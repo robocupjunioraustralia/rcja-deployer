@@ -1,9 +1,10 @@
 import path from "path";
 import { spawn } from 'child_process';
 import chalk from 'chalk';
+import type { Deployment } from "./deployment";
 
-export async function rebuildNPM(selected_deployment, buildCmd, buildOnly = false) {
-    if (!buildCmd) { buildCmd = selected_deployment.build_cmd; }
+export async function rebuildNPM(deployment: Deployment, buildCmd, buildOnly = false) {
+    if (!buildCmd) { buildCmd = deployment.build_cmd; }
 
     let hasFailed = false;
     let npmLog = '\n\n[NPM] Running npm commands...';
@@ -13,7 +14,7 @@ export async function rebuildNPM(selected_deployment, buildCmd, buildOnly = fals
         process.env.FORCE_COLOR = "true";
         return new Promise((resolve, reject) => {
             const npm = spawn(command, args, {
-                cwd: path.join(selected_deployment.path),
+                cwd: path.join(deployment.path),
                 env: {
                     ...process.env,
                     NPM_CONFIG_COLOR: 'always',
