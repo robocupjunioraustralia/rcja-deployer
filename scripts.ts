@@ -11,7 +11,6 @@ import chalk from 'chalk';
 import { Readable } from 'stream';
 import { finished } from 'stream/promises';
 
-import { rebuildViews } from './functions/rebuildViews';
 import { runSyncDatabases } from './functions/syncDatabases';
 import { runImportDatabases } from './functions/importDatabases';
 import { anonymiseDatabase } from './functions/anonymiseDatabase';
@@ -20,6 +19,7 @@ import { runDatabaseMigrations } from './functions/migrate';
 import { rebuildUsers } from './functions/rebuildUsers';
 import { rebuildNPM } from './functions/rebuildNPM';
 import { getDeploymentBackupDir } from "./functions/backup";
+import { rebuildViews } from './functions/docker';
 import type { Deployment } from './functions/deployment';
 
 dotenv.config();
@@ -154,7 +154,8 @@ export async function triggerUpdate() {
 
     if (user_answers.rebuild_views) {
         console.log(chalk.blue(`[DEPLOYER] Rebuilding views on ${deployment.title}...`))
-        await rebuildViews(deployment);
+        const rebuildViewsResult = await rebuildViews(deployment);
+        if (rebuildViewsResult.error) throw rebuildViewsResult.error;
     }
 
     console.log(chalk.blue(`[DEPLOYER] Installing NPM dependencies and running ${user_answers.npm_command} script for ${deployment.title}...`))
@@ -482,7 +483,8 @@ export async function triggerRebuildViews() {
     }
 
     console.log(`Rebuilding views on ${deployment.title}...`)
-    await rebuildViews(deployment);
+    const rebuildViewsResult = await rebuildViews(deployment);
+    if (rebuildViewsResult.error) throw rebuildViewsResult.error;
 }
 
 // npm run anonymise (deployment)

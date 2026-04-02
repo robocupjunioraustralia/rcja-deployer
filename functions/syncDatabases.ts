@@ -1,10 +1,9 @@
 import mariadb from 'mariadb';
-import { rebuildViews } from './rebuildViews';
 import { rebuildUsers } from './rebuildUsers';
 import { rebuildForeignKeys } from './rebuildForeignKeys';
 import { anonymiseDatabase } from './anonymiseDatabase';
 import { runDatabaseMigrations } from './migrate';
-import { setMaintenanceMode } from './docker';
+import { setMaintenanceMode, rebuildViews } from './docker';
 import { writeLog } from './logging';
 
 // This function syncronises the databases between the production and staging servers

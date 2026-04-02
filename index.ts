@@ -16,9 +16,9 @@ import { runSyncDatabases } from './functions/syncDatabases';
 import { runDatabaseMigrations } from './functions/migrate';
 import { setMaintenanceMode } from './functions/docker';
 import { writeLog } from './functions/logging';
-import { rebuildViews } from './functions/rebuildViews';
 import { rebuildNPM } from './functions/rebuildNPM';
 import { createDatabaseBackup, getDeploymentBackupDir } from "./functions/backup";
+import { rebuildViews } from "./functions/docker";
 import type { Deployment } from "./functions/deployment";
 
 dotenv.config();
@@ -221,14 +221,10 @@ app.post('/deploy', async (req, res) => {
     // Rebuild the views
     console.log('[SYNC] Rebuilding views...')
     deployLog += "\n--- REBUILDING VIEWS ---\n";
-    const [rebuildFailed, rebuildLog] = await rebuildViews(deployment);
-    console.log("[SYNC] View rebuild complete: ", rebuildFailed ? "FAIL" : "SUCCESS");
-    deployLog += rebuildLog;
-    deployLog += `\n\n--- REBUILDING VIEWS: ${rebuildFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
-
-    if (rebuildFailed) {
+    const rebuildViewsResult = await rebuildViews(deployment);
+    deployLog += rebuildViewsResult.log;
+    if (rebuildViewsResult.error) {
       writeLog(deployLog, false, "sync");
-      console.error("[SYNC] View rebuild failed");
       return res.status(500).send('Error rebuilding views');
     }
 

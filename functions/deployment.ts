@@ -2,16 +2,17 @@ import path from 'path';
 import { existsSync, readFileSync } from 'fs';
 import { spawn } from 'child_process';
 
+class DeploymentExecError extends Error {
+    constructor(message: string, public result: DeploymentExecResult) {
+        super(message);
+    }
+}
+
 export type DeploymentExecResult = {
     stdout: string;
     stderr: string;
     log: string;
-}
-
-export class DeploymentExecError extends Error {
-    constructor(message: string, public result: DeploymentExecResult) {
-        super(message);
-    }
+    error: DeploymentExecError | null;
 }
 
 export type Deployment = {
@@ -50,17 +51,22 @@ export type Deployment = {
 
 /**
  * Runs a command on a deployment's path OUTSIDE OF THE CONTAINER
- * @param deployment target
- * @param command The command to run using the host system's shell
- * @param args Args to be added after the command
- * @returns stdout, stderr, and a combined log of both
- * @throws {DeploymentExecError} If the process fails to start or the command exits with a non-zero code
+ * @param options
+ * @returns success state, stdout, stderr, and a combined log of both
  */
-export function deploymentExec(deployment: Deployment, command: string, args: string[] = []): Promise<DeploymentExecResult> {
-    return new Promise((resolve, reject) => {
-        const result: DeploymentExecResult = { stdout: '', stderr: '', log: '' };
+export function deploymentExec(options: {
+    deployment: Deployment;
+    /** The command to run using the host's system shell */
+    command: string;
+    /** Args to be added after the command */
+    args: string[];
+    successMessage?: string;
+    errorMessage?: string;
+}): Promise<DeploymentExecResult> {
+    return new Promise((resolve) => {
+        const result: DeploymentExecResult = { stdout: '', stderr: '', log: '', error: null };
 
-        const child = spawn(command, args, { cwd: deployment.path, shell: true });
+        const child = spawn(options.command, options.args, { cwd: options.deployment.path, shell: true });
 
         child.stdout.on('data', (chunk) => {
             const text = chunk.toString();
@@ -77,13 +83,32 @@ export function deploymentExec(deployment: Deployment, command: string, args: st
         });
 
         child.on('error', (err) => {
-            reject(new DeploymentExecError(`Failed to start process: ${err.message}`, result));
+            result.log += `\n[EXEC] Failed to start process: ${err.message}`;
+            console.error(`[EXEC] Failed to start process: ${err.message}`);
+
+            if (options.errorMessage) {
+                result.log += `\n[EXEC] ${options.errorMessage}`;
+                console.error(`[EXEC] ${options.errorMessage}`);
+            }
+
+            result.error = new DeploymentExecError(`Failed to start process: ${err.message}`, result);
+            resolve(result);
         });
 
         child.on('close', (code) => {
             if (code !== 0) {
-                reject(new DeploymentExecError(`Command failed with exit code ${code}`, result));
-                return;
+                result.log += `\n[EXEC] Command failed with exit code ${code}`;
+                console.error(`[EXEC] Command failed with exit code ${code}`);
+
+                if (options.errorMessage) {
+                    result.log += `\n[EXEC] ${options.errorMessage}`;
+                    console.error(`[EXEC] ${options.errorMessage}`);
+                }
+
+                result.error = new DeploymentExecError(`Command failed with exit code ${code}`, result);
+            } else if (options.successMessage) {
+                result.log += `\n[EXEC] ${options.successMessage}`;
+                console.info(`[EXEC] ${options.successMessage}`);
             }
 
             resolve(result);
@@ -119,7 +144,11 @@ export function getDeploymentVersion(deployment: Deployment): string | null {
  * @returns The list of git tags available for the deployment
  */
 export async function getDeploymentTags(deployment: Deployment): Promise<string[]> {
-    const result = await deploymentExec(deployment, 'git', ['tag']);
+    const result = await deploymentExec({
+        deployment,
+        command: 'git',
+        args: ['tag']
+    });
     return result.stdout.split('\n').filter((tag) => tag !== '');
 }
 
@@ -129,7 +158,11 @@ export async function getDeploymentTags(deployment: Deployment): Promise<string[
  * @returns True if there are uncommitted changes, false otherwise
  */
 export async function deploymentHasUncommittedChanges(deployment: Deployment): Promise<boolean> {
-    const result = await deploymentExec(deployment, 'git', ['status', '--porcelain']);
+    const result = await deploymentExec({
+        deployment,
+        command: 'git',
+        args: ['status', '--porcelain']
+    });
     return result.stdout.trim() !== '';
 }
 
@@ -141,11 +174,11 @@ export async function deploymentHasUncommittedChanges(deployment: Deployment): P
  * @returns The current branch name of the deployment (or the commit hash if useHash is true)
  */
 export async function getCurrentBranch(deployment: Deployment, useHash = false): Promise<string> {
-    const result = await deploymentExec(
+    const result = await deploymentExec({
         deployment,
-        'git',
-        useHash ? ['rev-parse', 'HEAD'] : ['rev-parse', '--abbrev-ref', 'HEAD']
-    );
+        command: 'git',
+        args: useHash ? ['rev-parse', 'HEAD'] : ['rev-parse', '--abbrev-ref', 'HEAD']
+    });
 
     let branchName = result.stdout.trim();
 
@@ -161,6 +194,10 @@ export async function getCurrentBranch(deployment: Deployment, useHash = false):
  * @param deployment The deployment to checkout
  * @param target The tag/branch/hash to checkout to
  */
-export async function checkoutDeploymentTo(deployment: Deployment, target: string): Promise<void> {
-    await deploymentExec(deployment, 'git', ['checkout', target]);
+export function checkoutDeploymentTo(deployment: Deployment, target: string): Promise<DeploymentExecResult> {
+    return deploymentExec({
+        deployment,
+        command: 'git',
+        args: ['checkout', target]
+    });
 }

@@ -1,11 +1,10 @@
 import mariadb from 'mariadb';
 import fs from 'fs';
 import { spawn } from 'child_process';
-import { rebuildViews } from './rebuildViews';
 import { rebuildUsers } from './rebuildUsers';
 import { rebuildForeignKeys } from './rebuildForeignKeys';
 import { runDatabaseMigrations } from './migrate';
-import { setMaintenanceMode } from './docker';
+import { setMaintenanceMode, rebuildViews } from './docker';
 import { writeLog } from './logging';
 import type { Deployment } from './deployment';
 
@@ -197,15 +196,10 @@ export async function runImportDatabases(deployment: Deployment, filePathsMain: 
     // Rebuild the views
     console.log('[IMPORT] Rebuilding views...')
     importLog += "\n--- REBUILDING VIEWS ---\n";
-    const [rebuildFailed, rebuildLog] = await rebuildViews(deployment);
-    console.log("[IMPORT] View rebuild complete: ", rebuildFailed ? "FAIL" : "SUCCESS");
-    importLog += rebuildLog;
-    importLog += `\n\n--- REBUILDING VIEWS: ${rebuildFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
-
-    if (rebuildFailed) {
-      writeLog(importLog, false, "import");
-      console.error("[IMPORT] View rebuild failed");
-      return [rebuildFailed, importLog];
+    const rebuildViewsResult = await rebuildViews(deployment);
+    if (rebuildViewsResult.error) {
+        writeLog(importLog, false, "import");
+        return [true, importLog];
     }
 
     importLog += `\n[IMPORT] Finished on ${new Date().toISOString()}\n\n`
