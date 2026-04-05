@@ -4,9 +4,11 @@ import chalk from 'chalk';
 import { config } from '../config';
 import type { Deployment } from "./deployment";
 
-export async function rebuildNPM(deployment: Deployment, buildCmd, buildOnly = false) {
-    if (!buildCmd) { buildCmd = deployment.build_cmd; }
-
+export async function rebuildNPM(
+    deployment: Deployment,
+    buildCmd: Deployment["build_cmd"] | "build" | "publish" | "watch",
+    buildOnly = false
+) {
     let hasFailed = false;
     let npmLog = '\n\n[NPM] Running npm commands...';
     console.log('[NPM] Running npm commands...');

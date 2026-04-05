@@ -1,6 +1,6 @@
 // Runner for command-line scripts
 
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import path from "path";
 import fs from 'fs';
 import os from 'os';
@@ -18,40 +18,49 @@ import { runDatabaseMigrations } from './functions/migrate';
 import { rebuildUsers } from './functions/rebuildUsers';
 import { rebuildNPM } from './functions/rebuildNPM';
 import { getDeploymentBackupDir } from "./functions/backup";
+import type { ApiBackupResult } from "./functions/backup";
 import { rebuildViews } from './functions/docker';
 import { getDeployment } from './functions/deployment';
 
 /**
- * Check that the deployer is up to date before proceeding
- * @returns {Promise<boolean>} - true if up to date, or if the user chooses to continue anyway
+ * Execute a git command
+ * @param args arguments for git
+ * @returns stdout
  */
-async function checkUpToDate() {
-    const git_status = await new Promise((resolve, reject) => {
-        exec('git fetch && git status', (error, stdout, stderr) => {
+function execGit(args: string[]): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+        execFile('git', args, (error, stdout, stderr) => {
             if (error) {
-                reject(error);
+                reject(new Error((stderr || error.message).toString().trim()));
                 return;
             }
-            resolve(stdout);
+
+            resolve(stdout.toString().trim());
         });
     });
+}
 
-    if (!git_status.includes('Your branch is up to date with')) {
-        const outdated_git_confirm = await inquirer.prompt([
-            {
-                type: 'confirm',
-                name: 'continue',
-                message: `Your deployer is out of date, you should 'git pull' first. Continue anyway?`,
-                default: false,
-            }
-        ]);
+/**
+ * Check that the deployer is up to date before proceeding
+ * @returns true if up to date, or if the user chooses to continue anyway
+ */
+async function checkUpToDate(): Promise<boolean> {
+    await execGit(['fetch', '--quiet']);
+    const aheadBehind = await execGit(['rev-list', '--left-right', '--count', 'origin/main...HEAD']);
+    const [behind, ahead] = aheadBehind.split(/\s+/).map((x) => Number.parseInt(x, 10));
 
-        if (!outdated_git_confirm.continue) {
-            return false;
-        }
+    if (behind === 0 && ahead === 0) {
+        return true;
     }
 
-    return true;
+    const answer = await inquirer.prompt({
+        type: 'confirm',
+        name: 'continue',
+        message: `Your deployer is not up to date (behind: ${behind}, ahead: ${ahead}). You should run 'git pull' first. Continue anyway?`,
+        default: false,
+    });
+
+    return answer.continue;
 }
 
 // npm run update (deployment)
@@ -242,14 +251,14 @@ export async function triggerImport() {
                 return;
             }
 
-            const backupData = await backupResponse.json();
+            const backupData = await backupResponse.json() as ApiBackupResult;
             backupName = backupData.name;
         }
 
         console.log(`\n[DEPLOYER] Retrieving backup "${backupName}" from ${remoteUrlBase}...`);
 
         const exportResponse = await fetch(`${remoteUrlBase}/${backupName}`, { headers: remoteHeaders });
-        if (!exportResponse.ok) {
+        if (!exportResponse.ok || exportResponse.body === null) {
             console.error(chalk.red(`[DEPLOYER] Failed to download backup from remote: ${exportResponse.status} ${exportResponse.statusText}`));
             console.error(await exportResponse.text());
             return;
@@ -314,7 +323,7 @@ export async function triggerImport() {
             }
         ]);
 
-        const backupDirPath = path.join(backupsPath, selectedBackup.backupDir);
+        const backupDirPath = path.join(deploymentBackupDir, selectedBackup.backupDir);
         for (const file of fs.readdirSync(backupDirPath)) {
             if (!file.endsWith('.sql')) {
                 continue;

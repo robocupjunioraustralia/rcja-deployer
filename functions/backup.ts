@@ -6,7 +6,9 @@ import { spawn } from 'child_process';
 import { config } from '../config';
 import type { Deployment } from './deployment';
 
-export function getDeploymentBackupDir(deployment: Deployment, makeIfMissing: boolean) {
+export function getDeploymentBackupDir(deployment: Deployment, makeIfMissing: true): string;
+export function getDeploymentBackupDir(deployment: Deployment, makeIfMissing: false): string | null;
+export function getDeploymentBackupDir(deployment: Deployment, makeIfMissing: boolean): string | null {
     const backupFolder = path.join(__dirname, '../backups');
     if (!fs.existsSync(backupFolder)) {
         if (!makeIfMissing) {
@@ -172,4 +174,11 @@ export async function createDatabaseBackup(deployment: Deployment, join_comps = 
     console.log('[BACKUP] Database backup complete');
     backupLog += '\n[BACKUP] Database backup complete\n';
     return { hasFailed, backupLog, backupName, backupDir, backupFiles };
+}
+
+type BackupFile = string;
+
+export type ApiBackupResult = {
+  name: string;
+  files: BackupFile[];
 }

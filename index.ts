@@ -18,6 +18,7 @@ import { setMaintenanceMode } from './functions/docker';
 import { writeLog } from './functions/logging';
 import { rebuildNPM } from './functions/rebuildNPM';
 import { createDatabaseBackup, getDeploymentBackupDir } from "./functions/backup";
+import type { ApiBackupResult } from "./functions/backup";
 import { rebuildViews } from "./functions/docker";
 import { getAllDeployments, getDeployment } from "./functions/deployment";
 import type { Deployment } from "./functions/deployment";
@@ -48,16 +49,13 @@ app.use(express.urlencoded({limit: '50mb', extended: true, parameterLimit: 50000
 app.use(express.static(path.join(__dirname, 'public')));
 
 morgan.token('statusColor', (req, res, args) => {
-  var status = (typeof res.headersSent !== 'boolean' ? Boolean(res.header) : res.headersSent)
-  ? res.statusCode
-  : undefined
+  const status = (res.headersSent ? res.statusCode : undefined) || 0;
 
-  // get status color
-  var color = status >= 500 ? 31 // red
-  : status >= 400 ? 33 // yellow
-  : status >= 300 ? 36 // cyan
-  : status >= 200 ? 32 // green
-  : 0; // no color
+  let color = 0; // default no color
+  if (status >= 500) color = 31; // red
+  else if (status >= 400) color = 33; // yellow
+  else if (status >= 300) color = 36; // cyan
+  else if (status >= 200) color = 32; // green
 
   return '\x1b[' + color + 'm' + status + '\x1b[0m';
 });
@@ -89,7 +87,7 @@ app.post('/deploy/rego', async (req, res) => {
     return res.status(400).send('Invalid or missing DEPLOY_ENV');
   }
 
-  target_env = req.body.environment === "prod" ? "production" : "staging";
+  const targetEnv = req.body.environment === "prod" ? "production" : "staging";
 
   console.log(`[REGO] Received deployment request for ${req.body.image}...`)
 
@@ -126,11 +124,9 @@ app.post('/deploy/rego', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("[REGO] Error running deployment script:",
-      err?.
-      message || err
-    );
-    res.write(`Error running deployment script: ${err?.message || err}`);
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[REGO] Error running deployment script:", message);
+    res.write(`Error running deployment script: ${message}`);
     res.status(500).end();
   }
 });
@@ -194,7 +190,7 @@ app.post('/deploy', async (req, res) => {
     // Update NPM packages and rebuild assets
     console.log('[DEPLOY] Updating NPM packages and rebuilding assets...')
     deployLog += "\n--- RUNNING NPM COMMANDS ---\n";
-    const [npmFailed, npmLog] = await rebuildNPM(deployment);
+    const [npmFailed, npmLog] = await rebuildNPM(deployment, deployment.build_cmd);
     console.log("[DEPLOY] NPM commands complete: ", npmFailed ? "FAIL" : "SUCCESS");
     deployLog += npmLog;
     deployLog += `\n\n--- NPM COMMANDS: ${npmFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
@@ -232,10 +228,12 @@ app.post('/deploy', async (req, res) => {
   });
 });
 
+type ExportRouteParams = { deployment_id: string };
+type ExportRouteLocals = { deployment: Deployment };
 
 async function canExport(
-  req: express.Request<{ deployment_id: string }>,
-  res: express.Response<unknown, { deployment: Deployment }>,
+  req: express.Request<ExportRouteParams, unknown, unknown, unknown, ExportRouteLocals>,
+  res: express.Response<unknown, ExportRouteLocals>,
   next: express.NextFunction
 ) {
   const deployment = getDeployment(req.params.deployment_id, false);
@@ -272,14 +270,14 @@ function cleanupExports() {
       .map((d) => ({ directory: d, stats: fs.statSync(path.join(deploymentBackupDir, d.name)) }))
       .sort((a, b) => a.stats.mtimeMs - b.stats.mtimeMs); // oldest first
 
-    if (existingExports.length === 0) {
-      continue;
-    }
-
     // Keep up the 5 most recent exports as long as they are less than 1 day old
-    while (existingExports.length > 5 || (Date.now() - existingExports[0].stats.mtimeMs) / (1000 * 60 * 60 * 24) > 1) {
-      const toDelete = existingExports.shift();
-      const deletePath = path.join(deploymentBackupDir, toDelete.directory.name);
+    const expiredExports = existingExports.filter((e, index) => {
+      const exportAgeDays = (Date.now() - e.stats.mtimeMs) / (1000 * 60 * 60 * 24);
+      return index >= 5 || exportAgeDays > 1;
+    });
+
+    for (const expiredExport of expiredExports) {
+      const deletePath = path.join(deploymentBackupDir, expiredExport.directory.name);
       console.log(`[CLEANUP] Deleting old export: ${deletePath}`);
       fs.rmSync(deletePath, { recursive: true, force: true });
     }
@@ -308,11 +306,12 @@ app.post('/export/:deployment_id', canExport, async (req, res) => {
   }
 
   res.status(200).setHeader('Content-Type', 'application/json');
-  res.write(JSON.stringify({ name: backupName, files: backupFiles }));
+  res.write(JSON.stringify({ name: backupName, files: backupFiles } satisfies ApiBackupResult));
   res.end();
 });
 
-app.get('/export/:deployment_id/:backup_name', canExport, async (req, res) => {
+type BackupRequest = express.Request<ExportRouteParams & { backup_name: string }>;
+app.get('/export/:deployment_id/:backup_name', canExport, async (req: BackupRequest, res) => {
   const deployment = res.locals.deployment;
 
   const deploymentBackupDir = getDeploymentBackupDir(deployment, false);
@@ -370,8 +369,9 @@ app.get('/export/:deployment_id/:backup_name', canExport, async (req, res) => {
       archive.on('error', reject);
     });
   } catch (err) {
-    console.error('[EXPORT] Error creating zip file:', err?.message || err);
-    exportLog += `\n[EXPORT] Error creating zip file: ${err?.message || err}`;
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[EXPORT] Error creating zip file:', message);
+    exportLog += `\n[EXPORT] Error creating zip file: ${message}`;
 
     res.status(500).setHeader('Content-Type', 'text/plain');
     res.write(exportLog);
@@ -384,15 +384,16 @@ app.get('/export/:deployment_id/:backup_name', canExport, async (req, res) => {
 
   res.attachment(zipName);
   try {
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       res.sendFile(zipPath, (err) => {
         if (err) { return reject(err); }
         resolve();
       });
     });
   } catch (err) {
-    console.error('[EXPORT] Error sending zip file:', err?.message || err);
-    exportLog += `\n[EXPORT] Error sending zip file: ${err?.message || err}`;
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[EXPORT] Error sending zip file:', message);
+    exportLog += `\n[EXPORT] Error sending zip file: ${message}`;
 
     res.status(500).end();
     writeLog(exportLog, false, "export");
@@ -420,7 +421,7 @@ function triggerSyncDatabases() {
   runSyncDatabases(fromDeployment, toDeployment);
 }
 
-async function runPHPScript(filePath, cwd) {
+async function runPHPScript(filePath: string, cwd: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const migrateCmd = spawn(config.PHP_PATH, [filePath], { cwd: cwd, shell: true });
 
@@ -429,7 +430,7 @@ async function runPHPScript(filePath, cwd) {
       if (code === 0) {
         return resolve(scriptLog);
       }
-      reject(`PHP script exited with code ${code?.message || code}:\n${scriptLog}`)
+      reject(`PHP script exited with code ${code}:\n${scriptLog}`)
     });
 
     migrateCmd.on('error', (err) => {
@@ -473,8 +474,9 @@ async function triggerCMSNightly() {
         const scriptOutput = await runPHPScript(nightlyScript, deployment.path)
         nightlyLog += scriptOutput;
       } catch (err) {
-        console.error('[NIGHTLY] Error running script:', err?.message || err);
-        nightlyLog += `[NIGHTLY] Error running script: ${err?.message || err}\n`;
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[NIGHTLY] Error running script:', message);
+        nightlyLog += `[NIGHTLY] Error running script: ${message}\n`;
 
         writeLog(nightlyLog, false, "nightly");
         return;
@@ -487,8 +489,9 @@ async function triggerCMSNightly() {
     }
   }
 
-  console.log(`[NIGHTLY] Nightly scripts complete. Took ${(new Date() - nightlyStart) / 1000} seconds.`);
-  nightlyLog += `[NIGHTLY] Nightly scripts complete. Took ${(new Date() - nightlyStart) / 1000} seconds.\n`;
+  const timeTaken = (new Date().getTime() - nightlyStart.getTime()) / 1000;
+  console.log(`[NIGHTLY] Nightly scripts complete. Took ${timeTaken} seconds.`);
+  nightlyLog += `[NIGHTLY] Nightly scripts complete. Took ${timeTaken} seconds.\n`;
   writeLog(nightlyLog, true, "nightly");
 }
 

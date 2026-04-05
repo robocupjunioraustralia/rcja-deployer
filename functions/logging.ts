@@ -3,7 +3,7 @@ import fs from 'fs';
 import nodemailer from 'nodemailer';
 import { config } from '../config';
 
-export function writeLog(message, success, type) {
+export function writeLog(message: string, success: boolean, type: 'deploy' | 'sync' | 'nightly' | 'import' | 'export') {
     const logDir = path.join(__dirname, '../logs');
     if (!fs.existsSync(logDir)) {
         fs.mkdirSync(logDir);
@@ -40,7 +40,7 @@ export function writeLog(message, success, type) {
     }
 }
 
-export function sendEmail(subject, message, attachment) {
+export function sendEmail(subject: string, message: string, attachment: string | null = null) {
     if (!config.SMTP_HOST) {
         console.log('[DEPLOYER] SMTP not configured, skipping email sending');
         return;
@@ -48,14 +48,15 @@ export function sendEmail(subject, message, attachment) {
 
     const transporter = nodemailer.createTransport({
         host: config.SMTP_HOST,
-        port: config.SMTP_PORT,
+        port: config.SMTP_PORT ? Number(config.SMTP_PORT) : undefined,
         secure: config.SMTP_SECURE === true || config.SMTP_SECURE === 'true',
         auth: {
             user: config.SMTP_USER,
             pass: config.SMTP_PASSWORD
         }
     });
-    const mailOptions = {
+
+    const mailOptions: nodemailer.SendMailOptions = {
         from: config.SMTP_FROM,
         to: config.SMTP_TO,
         subject: subject,
@@ -63,6 +64,7 @@ export function sendEmail(subject, message, attachment) {
         attachments: attachment ? [{ filename: path.basename(attachment), path: attachment }] : [],
         priority: "high"
     };
+
     transporter.sendMail(mailOptions, (err, info) => {
         if (err) {
             console.error(err);
