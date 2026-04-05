@@ -1,5 +1,6 @@
 import mariadb from 'mariadb';
 import { spawn } from 'child_process';
+import { config } from '../config';
 
 export async function rebuildForeignKeys(deploymentInfo) {
     let rebuildFKeysFailed = false;
@@ -8,7 +9,7 @@ export async function rebuildForeignKeys(deploymentInfo) {
     try {
         const runFKPHP = async (database_name, database_type, deploymentInfo) => {
             return new Promise((resolve, reject) => {
-                const viewCmd = spawn(process.env.PHP_PATH, [
+                const viewCmd = spawn(config.PHP_PATH, [
                     database_type == "comp" ? "utils/db_files/1.5_tables_script_fks.php" : "utils/db_files/main_1.5_tables_script_fks.php",
                     database_name
                 ], {
@@ -48,9 +49,9 @@ export async function rebuildForeignKeys(deploymentInfo) {
 
         // Connect to the MariaDB server
         const pool = mariadb.createPool({
-            host: process.env.DB_HOST,
-            user: process.env.DB_USER,
-            password: process.env.DB_PASSWORD
+            host: config.DB_HOST,
+            user: config.DB_USER,
+            password: config.DB_PASSWORD
         });
         const conn = await pool.getConnection();
         console.log("[REBUILDFK] Connected to MariaDB server");

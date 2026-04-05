@@ -1,6 +1,7 @@
 import mariadb from 'mariadb';
 import phppass from "node-php-password";
 import { faker } from '@faker-js/faker';
+import { config } from '../config';
 import type { Deployment } from './deployment';
 
 export async function anonymiseDatabase(deployment: Deployment) {
@@ -10,9 +11,9 @@ export async function anonymiseDatabase(deployment: Deployment) {
     try {
         // Connect to the MariaDB server
         const pool = mariadb.createPool({
-            host: process.env.DB_HOST,
-            user: process.env.DB_USER,
-            password: process.env.DB_PASSWORD
+            host: config.DB_HOST,
+            user: config.DB_USER,
+            password: config.DB_PASSWORD
         });
         const conn = await pool.getConnection();
         console.log("[ANONYMISE] Connected to MariaDB server");
@@ -153,8 +154,8 @@ export async function anonymiseDatabase(deployment: Deployment) {
             let numPinUpdated = 0;
             for (const row of userRows) {
                 let newPassHash = null;
-                if (process.env.ANON_PASSWORD) {
-                    newPassHash = await phppass.hash(process.env.ANON_PASSWORD, "PASSWORD_BCRYPT");
+                if (config.ANON_PASSWORD) {
+                    newPassHash = await phppass.hash(config.ANON_PASSWORD, "PASSWORD_BCRYPT");
                 } else {
                     newPassHash = await phppass.hash(faker.internet.password(), "PASSWORD_BCRYPT");
                 }

@@ -1,7 +1,6 @@
 // Runner for command-line scripts
 
 import { exec } from 'child_process';
-import dotenv from "dotenv";
 import path from "path";
 import fs from 'fs';
 import os from 'os';
@@ -10,7 +9,7 @@ import unzipper from 'unzipper';
 import chalk from 'chalk';
 import { Readable } from 'stream';
 import { finished } from 'stream/promises';
-
+import { config } from './config';
 import { runSyncDatabases } from './functions/syncDatabases';
 import { runImportDatabases } from './functions/importDatabases';
 import { anonymiseDatabase } from './functions/anonymiseDatabase';
@@ -21,8 +20,6 @@ import { rebuildNPM } from './functions/rebuildNPM';
 import { getDeploymentBackupDir } from "./functions/backup";
 import { rebuildViews } from './functions/docker';
 import type { Deployment } from './functions/deployment';
-
-dotenv.config();
 
 /**
  * Check that the deployer is up to date before proceeding
@@ -518,8 +515,8 @@ export async function triggerAnonymise() {
 //   uses env.SYNC_FROM_DEPLOYMENT and env.SYNC_TO_DEPLOYMENT to determine which deployments to sync
 export async function triggerSyncDatabases() {
     const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-    const fromDeployment = deployments_info[process.env.SYNC_FROM_DEPLOYMENT];
-    const toDeployment = deployments_info[process.env.SYNC_TO_DEPLOYMENT];
+    const fromDeployment = deployments_info[config.SYNC_FROM_DEPLOYMENT];
+    const toDeployment = deployments_info[config.SYNC_TO_DEPLOYMENT];
     console.log(`Syncronising deployments...`)
     await runSyncDatabases(fromDeployment, toDeployment);
 }

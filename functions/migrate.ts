@@ -5,6 +5,7 @@ import os from 'os';
 import fs from 'fs';
 import fse from 'fs-extra';
 import { spawn } from 'child_process';
+import { config } from '../config';
 import { createDatabaseBackup } from './backup';
 import { runComposer } from './runComposer';
 import {
@@ -196,9 +197,9 @@ export async function runDatabaseMigrations(deployment: Deployment, skipBackup, 
     }
 
     const connectionMain = mysql.createConnection({
-        host: process.env.DB_HOST,
-        user: process.env.DB_USER,
-        password: process.env.DB_PASSWORD,
+        host: config.DB_HOST,
+        user: config.DB_USER,
+        password: config.DB_PASSWORD,
         database: `${deployment.database_prefix}_main`,
     });
 
@@ -390,10 +391,10 @@ export async function runDatabaseMigrations(deployment: Deployment, skipBackup, 
 
                     const runSQLMigration = async (database_name) => {
                         return new Promise((resolve, reject) => {
-                            const migrateCmd = spawn(process.env.MYSQL_PATH, [
+                            const migrateCmd = spawn(config.MYSQL_PATH, [
                                 '-u',
-                                process.env.DB_USER,
-                                '-p' + process.env.DB_PASSWORD,
+                                config.DB_USER,
+                                '-p' + config.DB_PASSWORD,
                                 database_name,
                             ], { shell: true });
 
@@ -456,7 +457,7 @@ export async function runDatabaseMigrations(deployment: Deployment, skipBackup, 
                     // Run the PHP migration file
                     const runPHPMigration = async () => {
                         return new Promise((resolve, reject) => {
-                            const migrateCmd = spawn(process.env.PHP_PATH, [
+                            const migrateCmd = spawn(config.PHP_PATH, [
                                 migrationFilePath
                             ], {
                                 cwd: deployment.path,

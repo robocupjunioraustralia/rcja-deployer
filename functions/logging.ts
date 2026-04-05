@@ -1,6 +1,7 @@
 import path from "path";
 import fs from 'fs';
 import nodemailer from 'nodemailer';
+import { config } from '../config';
 
 export function writeLog(message, success, type) {
     const logDir = path.join(__dirname, '../logs');
@@ -40,23 +41,23 @@ export function writeLog(message, success, type) {
 }
 
 export function sendEmail(subject, message, attachment) {
-    if (!process.env.SMTP_HOST) {
+    if (!config.SMTP_HOST) {
         console.log('[DEPLOYER] SMTP not configured, skipping email sending');
         return;
     }
 
     const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: process.env.SMTP_PORT,
-        secure: process.env.SMTP_SECURE === 'true',
+        host: config.SMTP_HOST,
+        port: config.SMTP_PORT,
+        secure: config.SMTP_SECURE === true || config.SMTP_SECURE === 'true',
         auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASSWORD
+            user: config.SMTP_USER,
+            pass: config.SMTP_PASSWORD
         }
     });
     const mailOptions = {
-        from: process.env.SMTP_FROM,
-        to: process.env.SMTP_TO,
+        from: config.SMTP_FROM,
+        to: config.SMTP_TO,
         subject: subject,
         text: message,
         attachments: attachment ? [{ filename: path.basename(attachment), path: attachment }] : [],

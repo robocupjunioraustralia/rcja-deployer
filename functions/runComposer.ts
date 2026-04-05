@@ -1,6 +1,7 @@
 import path from "path";
 import { spawn } from 'child_process';
 import type { Deployment } from "./deployment";
+import { config } from '../config';
 
 export async function runComposer(deployment: Deployment, noDev) {
     let hasFailed = false;
@@ -13,7 +14,7 @@ export async function runComposer(deployment: Deployment, noDev) {
             if (noDev) {
                 composerOpts.push('--no-dev');
             }
-            const composer = spawn(process.env.COMPOSER_PATH, composerOpts, {
+            const composer = spawn(config.COMPOSER_PATH, composerOpts, {
                 cwd: path.join(deployment.path),
                 shell: true
             });

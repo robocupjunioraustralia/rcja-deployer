@@ -1,6 +1,7 @@
 import mariadb from 'mariadb';
 import fs from 'fs';
 import { spawn } from 'child_process';
+import { config } from '../config';
 import { rebuildUsers } from './rebuildUsers';
 import { rebuildForeignKeys } from './rebuildForeignKeys';
 import { runDatabaseMigrations } from './migrate';
@@ -25,9 +26,9 @@ async function importDatabases(deployment: Deployment, filePathsMain: string[], 
 
         // Connect to the MariaDB server using the login details
         const pool = mariadb.createPool({
-            host: process.env.DB_HOST,
-            user: process.env.DB_USER,
-            password: process.env.DB_PASSWORD
+            host: config.DB_HOST,
+            user: config.DB_USER,
+            password: config.DB_PASSWORD
         });
         const conn = await pool.getConnection();
         console.log("[IMPORT] Connected to MariaDB server")
@@ -68,9 +69,9 @@ async function importDatabases(deployment: Deployment, filePathsMain: string[], 
 
         async function runSQLFile(filePath) {
             return new Promise((resolve, reject) => {
-                const migrateCmd = spawn(process.env.MYSQL_PATH, [
-                    `-u${process.env.DB_USER}`,
-                    `-p${process.env.DB_PASSWORD}`
+                const migrateCmd = spawn(config.MYSQL_PATH, [
+                    `-u${config.DB_USER}`,
+                    `-p${config.DB_PASSWORD}`
                 ], {
                     stdio: ['pipe', 'pipe', 'pipe']
                 });

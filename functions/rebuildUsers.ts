@@ -2,6 +2,7 @@ import mariadb from 'mariadb';
 import fs from 'fs';
 import path from 'path';
 import phpParser from 'php-parser';
+import { config } from '../config';
 
 export async function rebuildUsers(deploymentInfo) {
     let rebuildUsersFailed = false;
@@ -20,9 +21,9 @@ export async function rebuildUsers(deploymentInfo) {
 
         // Connect to the MariaDB server
         const pool = mariadb.createPool({
-            host: process.env.DB_HOST,
-            user: process.env.DB_USER,
-            password: process.env.DB_PASSWORD
+            host: config.DB_HOST,
+            user: config.DB_USER,
+            password: config.DB_PASSWORD
         });
         const conn = await pool.getConnection();
         console.log("[REBUILDUSERS] Connected to MariaDB server");

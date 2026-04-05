@@ -1,6 +1,7 @@
 import path from "path";
 import { spawn } from 'child_process';
 import chalk from 'chalk';
+import { config } from '../config';
 import type { Deployment } from "./deployment";
 
 export async function rebuildNPM(deployment: Deployment, buildCmd, buildOnly = false) {
@@ -11,12 +12,12 @@ export async function rebuildNPM(deployment: Deployment, buildCmd, buildOnly = f
     console.log('[NPM] Running npm commands...');
 
     const spawnNpm = async (command, args) => {
-        process.env.FORCE_COLOR = "true";
+        config.FORCE_COLOR = "true";
         return new Promise((resolve, reject) => {
             const npm = spawn(command, args, {
                 cwd: path.join(deployment.path),
                 env: {
-                    ...process.env,
+                    ...config,
                     NPM_CONFIG_COLOR: 'always',
                     NPM_CONFIG_FUND: 'false',
                 },
@@ -53,7 +54,7 @@ export async function rebuildNPM(deployment: Deployment, buildCmd, buildOnly = f
         console.log("[NPM] Installing npm packages...");
         npmLog += "\n[NPM] Installing npm packages...";
 
-        await spawnNpm(process.env.NPM_PATH, ['ci']).catch((err) => {
+        await spawnNpm(config.NPM_PATH, ['ci']).catch((err) => {
             console.error('[NPM] npm ci failed');
             npmLog += '\n[NPM] npm ci failed';
             console.error(err);
@@ -66,7 +67,7 @@ export async function rebuildNPM(deployment: Deployment, buildCmd, buildOnly = f
         console.log("[NPM] Pruning old npm packages...");
         npmLog += "\n[NPM] Pruning old npm packages...";
 
-        await spawnNpm(process.env.NPM_PATH, ['prune', '--no-audit']).catch((err) => {
+        await spawnNpm(config.NPM_PATH, ['prune', '--no-audit']).catch((err) => {
             console.error('[NPM] npm prune failed');
             npmLog += '\n[NPM] npm prune failed';
             console.error(err);
@@ -83,7 +84,7 @@ export async function rebuildNPM(deployment: Deployment, buildCmd, buildOnly = f
             console.log(chalk.blue("[DEPLOYER] Running NPM in watch mode. This will not exit until you press Ctrl+C."));
         }
 
-        await spawnNpm(process.env.NPM_PATH, ['run', buildCmd]).catch((err) => {
+        await spawnNpm(config.NPM_PATH, ['run', buildCmd]).catch((err) => {
             console.error('[NPM] npm run ' + buildCmd + ' failed');
             npmLog += '\n[NPM] npm run ' + buildCmd + ' failed';
             console.error(err);

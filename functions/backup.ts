@@ -3,6 +3,7 @@ import path from "path";
 import mysql from 'mysql';
 import fs from 'fs';
 import { spawn } from 'child_process';
+import { config } from '../config';
 import type { Deployment } from './deployment';
 
 export function getDeploymentBackupDir(deployment: Deployment, makeIfMissing: boolean) {
@@ -39,10 +40,10 @@ export async function createDatabaseBackup(deployment: Deployment, join_comps = 
 
     const createMySQLDump = async (databases, label, writeStream) => {
         return new Promise((resolve, reject) => {
-            const mysqldump = spawn(process.env.MYSQLDUMP_PATH, [
+            const mysqldump = spawn(config.MYSQLDUMP_PATH, [
                 '-u',
-                process.env.DB_USER,
-                '-p' + process.env.DB_PASSWORD,
+                config.DB_USER,
+                '-p' + config.DB_PASSWORD,
                 '--databases',
                 ...databases,
             ], { shell: true });
@@ -75,9 +76,9 @@ export async function createDatabaseBackup(deployment: Deployment, join_comps = 
 
     // Backup comp databases
     const connectionMain = mysql.createConnection({
-        host: process.env.DB_HOST,
-        user: process.env.DB_USER,
-        password: process.env.DB_PASSWORD,
+        host: config.DB_HOST,
+        user: config.DB_USER,
+        password: config.DB_PASSWORD,
         database: `${deployment.database_prefix}_main`,
     });
 

@@ -4,7 +4,6 @@ import { exec } from 'child_process';
 import express from "express";
 import bodyParser from "body-parser";
 import morgan from "morgan";
-import dotenv from "dotenv";
 import path from "path";
 import crypto from 'crypto';
 import fs from 'fs';
@@ -12,6 +11,7 @@ import os from 'os';
 import archiver from 'archiver';
 import { spawn } from 'child_process';
 import { CronJob } from "cron";
+import { config } from "./config"
 import { runSyncDatabases } from './functions/syncDatabases';
 import { runDatabaseMigrations } from './functions/migrate';
 import { setMaintenanceMode } from './functions/docker';
@@ -21,15 +21,13 @@ import { createDatabaseBackup, getDeploymentBackupDir } from "./functions/backup
 import { rebuildViews } from "./functions/docker";
 import type { Deployment } from "./functions/deployment";
 
-dotenv.config();
-
 const app = express();
 app.set('trust proxy', true);
 app.set('case sensitive routing', false);
 
-if (process.env.SENTRY_DSN) {
+if (config.SENTRY_DSN) {
   Sentry.init({
-    dsn: process.env.SENTRY_DSN,
+    dsn: config.SENTRY_DSN,
     integrations: [
       new Sentry.Integrations.Http({ tracing: true }),
       new Sentry.Integrations.Express({ app }),
@@ -70,7 +68,7 @@ app.get("/deploy/ping", (req, res) => {
 
 // GitHub actions endpoint for deployments of robocupjunior/RCJA_Registration_System
 // Action has two secrets:
-// - DEPLOY_TOKEN: Matches process.env.REGO_DEPLOY_SECRET for authentication
+// - DEPLOY_TOKEN: Matches config.REGO_DEPLOY_SECRET for authentication
 // - DEPLOY_URL: POST https://rcja.app/deploy/rego
 // Expects a JSON payload with:
 // - image: the SHA of the deployment
@@ -78,7 +76,7 @@ app.get("/deploy/ping", (req, res) => {
 app.post('/deploy/rego', async (req, res) => {
   console.log(req.body);
   const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.split(" ")[1] !== process.env.REGO_DEPLOY_SECRET) {
+  if (authHeader && authHeader.split(" ")[1] !== config.REGO_DEPLOY_SECRET) {
     return res.status(401).send('Unauthorized');
   }
 
@@ -96,11 +94,11 @@ app.post('/deploy/rego', async (req, res) => {
 
   res.setHeader('Content-Type', 'text/plain');
 
-  // Run process.env.REGO_DEPLOY_SCRIPT with a param of the sha. Pipe the output to the response.
+  // Run config.REGO_DEPLOY_SCRIPT with a param of the sha. Pipe the output to the response.
   try {
-    const deployCmd = spawn("sudo", [process.env.REGO_DEPLOY_SCRIPT, req.body.image, target_env], {
+    const deployCmd = spawn("sudo", [config.REGO_DEPLOY_SCRIPT, req.body.image, targetEnv], {
       shell: true,
-      cwd: process.env.REGO_DEPLOY_PATH
+      cwd: config.REGO_DEPLOY_PATH
     });
 
     deployCmd.stdout.on('data', (data) => {
@@ -150,7 +148,7 @@ app.post('/deploy', async (req, res) => {
     return res.status(401).send('Unauthorized');
   }
 
-  const hmac = crypto.createHmac('sha1', process.env.DEPLOY_SECRET);
+  const hmac = crypto.createHmac('sha1', config.DEPLOY_SECRET);
   const digest = 'sha1=' + hmac.update(payload).digest('hex');
 
   if (signature !== digest) {
@@ -409,24 +407,24 @@ app.get('/export/:deployment_id/:backup_name', canExport, async (req, res) => {
   writeLog(exportLog, true, "export");
 });
 
-if (process.env.SENTRY_DSN) {
+if (config.SENTRY_DSN) {
   app.use(Sentry.Handlers.errorHandler());
 }
 
-app.listen(process.env.HTTP_PORT, () => {
-  console.log(`Deployer server listening on port ${process.env.HTTP_PORT}`);
+app.listen(config.HTTP_PORT, () => {
+  console.log(`Deployer server listening on port ${config.HTTP_PORT}`);
 });
 
 function triggerSyncDatabases() {
   const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-  const fromDeployment = deployments_info[process.env.SYNC_FROM_DEPLOYMENT];
-  const toDeployment = deployments_info[process.env.SYNC_TO_DEPLOYMENT];
+  const fromDeployment = deployments_info[config.SYNC_FROM_DEPLOYMENT];
+  const toDeployment = deployments_info[config.SYNC_TO_DEPLOYMENT];
   runSyncDatabases(fromDeployment, toDeployment);
 }
 
 async function runPHPScript(filePath, cwd) {
   return new Promise((resolve, reject) => {
-    const migrateCmd = spawn(process.env.PHP_PATH, [filePath], { cwd: cwd, shell: true });
+    const migrateCmd = spawn(config.PHP_PATH, [filePath], { cwd: cwd, shell: true });
 
     let scriptLog = "";
     migrateCmd.on('exit', (code) => {

@@ -1,4 +1,5 @@
 import mariadb from 'mariadb';
+import { config } from '../config';
 import { rebuildUsers } from './rebuildUsers';
 import { rebuildForeignKeys } from './rebuildForeignKeys';
 import { anonymiseDatabase } from './anonymiseDatabase';
@@ -18,9 +19,9 @@ async function syncDatabases(fromDeployment, toDeployment) {
 
         // Connect to the MariaDB server using the login details
         const pool = mariadb.createPool({
-            host: process.env.DB_HOST,
-            user: process.env.DB_USER,
-            password: process.env.DB_PASSWORD
+            host: config.DB_HOST,
+            user: config.DB_USER,
+            password: config.DB_PASSWORD
         });
         const conn = await pool.getConnection();
         console.log("[SYNC] Connected to MariaDB server")
