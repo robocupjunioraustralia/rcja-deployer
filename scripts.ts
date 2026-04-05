@@ -19,7 +19,7 @@ import { rebuildUsers } from './functions/rebuildUsers';
 import { rebuildNPM } from './functions/rebuildNPM';
 import { getDeploymentBackupDir } from "./functions/backup";
 import { rebuildViews } from './functions/docker';
-import type { Deployment } from './functions/deployment';
+import { getDeployment } from './functions/deployment';
 
 /**
  * Check that the deployer is up to date before proceeding
@@ -54,42 +54,17 @@ async function checkUpToDate() {
     return true;
 }
 
-/**
- * Retrieve deployment config for a given deployment name, or the first deployment if none is given
- * @param {string} deploymentName - Name of the deployment to retrieve
- * @returns {object|null} - Deployment config, or null if not found
- */
-function getDeploymentConfig(deploymentName: string): Deployment|null {
-    const deployments = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-
-    if (deploymentName === undefined) {
-        return deployments[Object.keys(deployments)[0]];
-    }
-
-    const deploymentConfig = deployments[deploymentName];
-
-    if (!deploymentConfig) {
-        console.error(`Deployment ${deploymentName} not found in deployments.json`);
-        return null;
-    }
-
-    return deploymentConfig;
-}
-
 // npm run update (deployment)
 //   Interactive script to update a deployment
 //
 //   params:
-//   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
+//   deployment (optional) - deployment key, falls back to the first deployment in deployments.json
 export async function triggerUpdate() {
     if (!(await checkUpToDate())) {
         return;
     }
 
-    const deployment = getDeploymentConfig(process.argv[process.argv.indexOf('update') + 1]);
-    if (!deployment) {
-        return;
-    }
+    const deployment = getDeployment(process.argv[process.argv.indexOf('update') + 1], true);
 
     console.log(chalk.blue(`[DEPLOYER] Updating ${deployment.title}...`));
     console.log(chalk.cyan(`[INFO] This tool allows you to:`));
@@ -165,16 +140,13 @@ export async function triggerUpdate() {
 //   CAUTION: This will overwrite the target databases
 //
 //   params:
-//   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
+//   deployment (optional) - deployment key, falls back to the first deployment in deployments.json
 export async function triggerImport() {
     if (!(await checkUpToDate())) {
         return;
     }
 
-    const deployment = getDeploymentConfig(process.argv[process.argv.indexOf('import') + 1]);
-    if (!deployment) {
-        return;
-    }
+    const deployment = getDeployment(process.argv[process.argv.indexOf('import') + 1], true);
 
     let hasConfirmed = false;
     async function promptContinue() {
@@ -422,23 +394,9 @@ export async function triggerImport() {
 //   Runs any new migration scripts in the updates folder
 //
 //   params:
-//   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
+//   deployment (optional) - deployment key, falls back to the first deployment in deployments.json
 export async function triggerMigrate() {
-    const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-    let deployment = deployments_info[Object.keys(deployments_info)[0]];
-
-    // if deployment is not specified, set selected deployment to first deployment in deployments.json
-    if (process.argv[process.argv.indexOf('migrate') + 1] !== undefined) {
-        const deploymentArg = process.argv[process.argv.indexOf('migrate') + 1];
-        const deployment_info = deployments_info[deploymentArg];
-
-        if (deployment_info) {
-            deployment = deployment_info;
-        } else {
-            console.error(`Deployment ${deploymentArg} not found in deployments.json`);
-            return;
-        }
-    }
+    const deployment = getDeployment(process.argv[process.argv.indexOf('migrate') + 1], true);
 
     console.log(`Running migrations on ${deployment.title}...`)
     const [migrateFailed, migrateLog] = await runDatabaseMigrations(
@@ -461,23 +419,9 @@ export async function triggerMigrate() {
 //   Rebuilds all views in the database
 //
 //   params:
-//   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
+//   deployment (optional) - deployment key, falls back to the first deployment in deployments.json
 export async function triggerRebuildViews() {
-    const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-    let deployment = deployments_info[Object.keys(deployments_info)[0]];
-
-    // if deployment is not specified, set selected deployment to first deployment in deployments.json
-    if (process.argv[process.argv.indexOf('rebuildViews') + 1] !== undefined) {
-        const deploymentArg = process.argv[process.argv.indexOf('rebuildViews') + 1];
-        const deployment_info = deployments_info[deploymentArg];
-
-        if (deployment_info) {
-            deployment = deployment_info;
-        } else {
-            console.error(`Deployment ${deploymentArg} not found in deployments.json`);
-            return;
-        }
-    }
+    const deployment = getDeployment(process.argv[process.argv.indexOf('rebuildViews') + 1], true);
 
     console.log(`Rebuilding views on ${deployment.title}...`)
     const rebuildViewsResult = await rebuildViews(deployment);
@@ -488,23 +432,9 @@ export async function triggerRebuildViews() {
 //   Anonymises the database
 //
 //   params:
-//   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
+//   deployment (optional) - deployment key, falls back to the first deployment in deployments.json
 export async function triggerAnonymise() {
-    const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-    let deployment = deployments_info[Object.keys(deployments_info)[0]];
-
-    // if deployment is not specified, set selected deployment to first deployment in deployments.json
-    if (process.argv[process.argv.indexOf('anonymise') + 1] !== undefined) {
-        const deploymentArg = process.argv[process.argv.indexOf('anonymise') + 1];
-        const deployment_info = deployments_info[deploymentArg];
-
-        if (deployment_info) {
-            deployment = deployment_info;
-        } else {
-            console.error(`Deployment ${deploymentArg} not found in deployments.json`);
-            return;
-        }
-    }
+    const deployment = getDeployment(process.argv[process.argv.indexOf('anonymise') + 1], true);
 
     console.log(`Anonymising ${deployment.title}...`)
     await anonymiseDatabase(deployment);
@@ -514,9 +444,8 @@ export async function triggerAnonymise() {
 //   Syncronises the production database to the development database
 //   uses env.SYNC_FROM_DEPLOYMENT and env.SYNC_TO_DEPLOYMENT to determine which deployments to sync
 export async function triggerSyncDatabases() {
-    const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-    const fromDeployment = deployments_info[config.SYNC_FROM_DEPLOYMENT];
-    const toDeployment = deployments_info[config.SYNC_TO_DEPLOYMENT];
+    const fromDeployment = getDeployment(config.SYNC_FROM_DEPLOYMENT, true);
+    const toDeployment = getDeployment(config.SYNC_TO_DEPLOYMENT, true);
     console.log(`Syncronising deployments...`)
     await runSyncDatabases(fromDeployment, toDeployment);
 }
@@ -525,23 +454,9 @@ export async function triggerSyncDatabases() {
 //   Rebuilds all users for a database
 //
 //   params:
-//   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
+//   deployment (optional) - deployment key, falls back to the first deployment in deployments.json
 export async function triggerRebuildUsers() {
-    const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-    let deployment = deployments_info[Object.keys(deployments_info)[0]];
-
-    // if deployment is not specified, set selected deployment to first deployment in deployments.json
-    if (process.argv[process.argv.indexOf('rebuildUsers') + 1] !== undefined) {
-        const deploymentArg = process.argv[process.argv.indexOf('rebuildUsers') + 1];
-        const deployment_info = deployments_info[deploymentArg];
-
-        if (deployment_info) {
-            deployment = deployment_info;
-        } else {
-            console.error(`Deployment ${deploymentArg} not found in deployments.json`);
-            return;
-        }
-    }
+    const deployment = getDeployment(process.argv[process.argv.indexOf('rebuildUsers') + 1], true);
 
     console.log(`Recreating Users for ${deployment.title}...`)
     await rebuildUsers(deployment);
@@ -551,23 +466,9 @@ export async function triggerRebuildUsers() {
 //   Rebuilds all foriegn keys in the database
 //
 //   params:
-//   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
+//   deployment (optional) - deployment key, falls back to the first deployment in deployments.json
 export async function triggerRebuildForeignKeys() {
-    const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-    let deployment = deployments_info[Object.keys(deployments_info)[0]];
-
-    // if deployment is not specified, set selected deployment to first deployment in deployments.json
-    if (process.argv[process.argv.indexOf('rebuildForeignKeys') + 1] !== undefined) {
-        const deploymentArg = process.argv[process.argv.indexOf('rebuildForeignKeys') + 1];
-        const deployment_info = deployments_info[deploymentArg];
-
-        if (deployment_info) {
-            deployment = deployment_info;
-        } else {
-            console.error(`Deployment ${deploymentArg} not found in deployments.json`);
-            return;
-        }
-    }
+    const deployment = getDeployment(process.argv[process.argv.indexOf('rebuildForeignKeys') + 1], true);
 
     console.log(`Recreating foreign keys for ${deployment.title}...`)
     await rebuildForeignKeys(deployment);
@@ -579,27 +480,13 @@ export async function triggerRebuildForeignKeys() {
 //   Triggers npm ci, npm prune, then npm run build/watch/publish
 //
 //   params:
-//   deployment (optional) - name of deployment in deployments.json, defaults to first deployment in deployments.json
+//   deployment (optional) - deployment key, falls back to the first deployment in deployments.json
 export async function triggerNPM() {
     let selected_cmd = 'build';
     if (process.argv.includes('watch')) { selected_cmd = 'watch'; }
     if (process.argv.includes('publish')) { selected_cmd = 'publish'; }
 
-    const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-    let deployment = deployments_info[Object.keys(deployments_info)[0]];
-
-    // if deployment is not specified, set selected deployment to first deployment in deployments.json
-    if (process.argv[process.argv.indexOf(selected_cmd) + 1] !== undefined) {
-        const deploymentArg = process.argv[process.argv.indexOf(selected_cmd) + 1];
-        const deployment_info = deployments_info[deploymentArg];
-
-        if (deployment_info) {
-            deployment = deployment_info;
-        } else {
-            console.error(`Deployment ${deploymentArg} not found in deployments.json`);
-            return;
-        }
-    }
+    const deployment = getDeployment(process.argv[process.argv.indexOf(selected_cmd) + 1], true);
 
     console.log(`Installing NPM dependencies and running ${selected_cmd} script for ${deployment.title}...`)
     await rebuildNPM(deployment, selected_cmd);

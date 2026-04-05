@@ -19,6 +19,7 @@ import { writeLog } from './functions/logging';
 import { rebuildNPM } from './functions/rebuildNPM';
 import { createDatabaseBackup, getDeploymentBackupDir } from "./functions/backup";
 import { rebuildViews } from "./functions/docker";
+import { getAllDeployments, getDeployment } from "./functions/deployment";
 import type { Deployment } from "./functions/deployment";
 
 const app = express();
@@ -156,18 +157,17 @@ app.post('/deploy', async (req, res) => {
     return res.status(401).send('Unauthorized');
   }
 
-  const deployments_info: Record<string, Deployment> = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-
-  // Find the repository in deployments.json
-  const valid_deployments = Object.values(deployments_info).filter(d => d.repository === req.body.repository.full_name);
-  if (valid_deployments.length === 0) {
-    console.log(`[DEPLOYER] Repository ${req.body.repository.full_name} not found in deployments.json. Not deploying.`);
+  // Find a deployment matching the repository
+  const deployments = getAllDeployments();
+  const matchedDeployments = Object.values(deployments).filter((d) => d.repository === req.body.repository.full_name);
+  if (matchedDeployments.length === 0) {
+    console.log(`[DEPLOYER] No deployment found for repository ${req.body.repository.full_name}. Not deploying.`);
     return res.status(200).send('OK');
   }
   console.log(`[DEPLOYER] Received change on ${req.body.repository.full_name}...`)
 
   // Check that the branch being pushed to is the master branch
-  const deployment = valid_deployments.find(d => d.branch_ref === req.body.ref);
+  const deployment = matchedDeployments.find((d) => d.branch_ref === req.body.ref);
   if (!deployment) {
     console.log(`[DEPLOYER] The branch ${req.body.ref} does not match a deployment config. Not deploying.`);
     return res.status(200).send('OK');
@@ -232,19 +232,18 @@ app.post('/deploy', async (req, res) => {
   });
 });
 
-async function canExport(req, res, next) {
-  const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-  const deployment = deployments_info[req.params.deployment_id] ?? null;
-  if (!deployment) {
-    return res.sendStatus(403);
-  }
 
-  if (!deployment.export) {
-    return res.sendStatus(403); // Exporting not enabled for this deployment
-  }
+async function canExport(
+  req: express.Request<{ deployment_id: string }>,
+  res: express.Response<unknown, { deployment: Deployment }>,
+  next: express.NextFunction
+) {
+  const deployment = getDeployment(req.params.deployment_id, false);
+  if (!deployment) { return res.sendStatus(403); }
+  if (!deployment.export) { return res.sendStatus(403); } // Exporting not enabled for this deployment
 
-  const requestIp = req.ip.replace('::ffff:', '');
-  if (!deployment.export.allowed_ips.includes(requestIp)) {
+  const requestIp = req.ip?.replace('::ffff:', '');
+  if (!requestIp || !deployment.export.allowed_ips.includes(requestIp)) {
     console.log(`[EXPORT] Request from IP "${requestIp}" not allowed for deployment "${deployment.title}"`);
     return res.sendStatus(403);
   }
@@ -255,7 +254,7 @@ async function canExport(req, res, next) {
     return res.sendStatus(403);
   }
 
-  req.deployment = deployment;
+  res.locals.deployment = deployment;
   next();
 }
 
@@ -288,7 +287,7 @@ function cleanupExports() {
 }
 
 app.post('/export/:deployment_id', canExport, async (req, res) => {
-  const deployment = req.deployment;
+  const deployment = res.locals.deployment;
 
   console.log(`[DEPLOYER] Creating backup for ${deployment.title}...`);
   let exportLog = `--- Creating backup for ${deployment.title} ---\n`;
@@ -314,7 +313,7 @@ app.post('/export/:deployment_id', canExport, async (req, res) => {
 });
 
 app.get('/export/:deployment_id/:backup_name', canExport, async (req, res) => {
-  const deployment = req.deployment;
+  const deployment = res.locals.deployment;
 
   const deploymentBackupDir = getDeploymentBackupDir(deployment, false);
   if (!deploymentBackupDir) {
@@ -416,9 +415,8 @@ app.listen(config.HTTP_PORT, () => {
 });
 
 function triggerSyncDatabases() {
-  const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-  const fromDeployment = deployments_info[config.SYNC_FROM_DEPLOYMENT];
-  const toDeployment = deployments_info[config.SYNC_TO_DEPLOYMENT];
+  const fromDeployment = getDeployment(config.SYNC_FROM_DEPLOYMENT, true);
+  const toDeployment = getDeployment(config.SYNC_TO_DEPLOYMENT, true);
   runSyncDatabases(fromDeployment, toDeployment);
 }
 
@@ -451,14 +449,13 @@ async function runPHPScript(filePath, cwd) {
 }
 
 async function triggerCMSNightly() {
-  const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-  const deployments = Object.values(deployments_info);
+  const deployments = getAllDeployments();
 
   const nightlyStart = new Date();
   let nightlyLog = `--- Running nightly scripts on ${deployments.length} deployments ---\n`;
   nightlyLog += `[NIGHTLY] Started on ${nightlyStart.toISOString()}\n`;
 
-  for (const deployment of deployments) {
+  for (const deployment of Object.values(deployments)) {
     nightlyLog += `--- Deployment: ${deployment.title} ---\n`;
 
     if (!deployment.run_nightly) {

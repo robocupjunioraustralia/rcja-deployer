@@ -50,6 +50,38 @@ export type Deployment = {
 }
 
 /**
+ * @returns all deployment configs from deployments.json
+ */
+export function getAllDeployments(): Record<string, Deployment> {
+    const deploymentsConfig = readFileSync(path.join(__dirname, '../deployments.json'), 'utf8');
+    const deployments: unknown = JSON.parse(deploymentsConfig);
+    if (typeof deployments !== 'object' || deployments === null) {
+        throw new Error('Invalid deployments configuration');
+    }
+
+    return deployments as Record<string, Deployment>;
+}
+
+/**
+ * Retrieve deployment config for a given deployment key, or the first deployment if none is given
+ * @param deploymentKey The key of the deployment to retrieve (as specified in deployments.json)
+ * @param assert Whether to throw an error (true) or return null (false) if the deployment can't be found
+ * @returns Deployment config, or null if not found when assert is false
+ */
+export function getDeployment<TAssert extends boolean = false>(
+    deploymentKey?: string,
+    assert: TAssert = false as TAssert
+): TAssert extends true ? Deployment : Deployment | null {
+    const deployments = getAllDeployments();
+    const deployment = deploymentKey ? deployments[deploymentKey] : Object.values(deployments)[0];
+    if (assert && !deployment) {
+        throw new Error(`Deployment with key "${deploymentKey}" not found`);
+    }
+
+    return deployment as TAssert extends true ? Deployment : Deployment | null;
+}
+
+/**
  * Runs a command on a deployment's path OUTSIDE OF THE CONTAINER
  * @param options
  * @returns success state, stdout, stderr, and a combined log of both
