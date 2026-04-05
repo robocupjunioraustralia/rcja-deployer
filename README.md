@@ -13,8 +13,6 @@ The following software is required for the various functions of this tool to wor
 - NodeJS (https://nodejs.org/en/download) `20.x.x LTS`
 - PHP (https://www.php.net/downloads) `8.2`
 - MariaDB (https://mariadb.org/download) `10.6` (Including MySQL/MariaDB Dump)
-- Composer (https://getcomposer.org/download) `2.5`
-
 
 ## Installation
 
@@ -36,7 +34,7 @@ The following variables must be set for the deployment scripts to work.
 | DB_HOST<br>DB_USER<br>DB_PASSWORD | Details for the MariaDB server with a working instance of the RCJ CMS |
 | DB_CACHE_NAME | Required for the anonymise function.<br>The name of the MySQL database to use for caching names.<br>If you wish to use this, create an empty database using the specificed name, and populate it using the schema in db.sql. |
 | | |
-| NPM_PATH<br>PHP_PATH<br>MYSQL_PATH<br>MYSQLDUMP_PATH<br>COMPOSER_PATH | The paths to your npm, php, mysql, mysqldump, and composer executables.<br>There are some suggestions in the sample file for windows/linux |
+| NPM_PATH<br>PHP_PATH<br>MYSQL_PATH<br>MYSQLDUMP_PATH | The paths to your npm, php, mysql, and mysqldump executables.<br>There are some suggestions in the sample file for windows/linux |
 
 Some other variables of note include: (these are only required if you want to run the full server with `npm start`)
 | Variable | Description |
@@ -66,7 +64,6 @@ The sample included is meant for a full deployment, for a development instance o
         "pull_cmd": "git fetch --all && git pull git status",
         "build_cmd": "build",
         "backup": true,
-        "no_composer_dev": true,
         "run_nightly": true,
         "branch_ref": "refs/heads/develop",
     }
@@ -84,7 +81,6 @@ Here's a quick explanation of each variable:
 | *pull_cmd | The command to use to pull latest changes from the repository |
 | *build_cmd | The npm script to build assets, "build" (dev) or "publish" (prod) |
 | backup | Whether or not to backup the database before running migrations |
-| no_composer_dev | True to include `--no-dev` in the composer install command |
 | run_nightly | Whether or not to run the nightly script on this deployment |
 | branch_ref | The git ref for confirming the branch sent from the the webhook |
 

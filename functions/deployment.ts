@@ -36,8 +36,6 @@ export type Deployment = {
     backup?: boolean;
     /** whether or not to run the nightly script for this deployment */
     run_nightly?: boolean;
-    /** false to include the '--no-dev' flag in the composer install command */
-    no_composer_dev?: boolean;
     /** allow this instance to be exported via /export/[deploymentKey] */
     export?: {
         allowed_ips: string[];

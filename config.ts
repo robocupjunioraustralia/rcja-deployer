@@ -38,7 +38,6 @@ type Env = {
     PHP_PATH: string;
     MYSQL_PATH: string;
     MYSQLDUMP_PATH: string;
-    COMPOSER_PATH: string;
 
     /** When using the sync function, the deployment key to sync from */
     SYNC_FROM_DEPLOYMENT: string;
