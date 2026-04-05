@@ -20,6 +20,24 @@ import { getDeploymentBackupDir } from "./functions/backup";
 import type { ApiBackupResult } from "./functions/backup";
 import { rebuildViews, rebuildForeignKeys } from './functions/docker';
 import { getDeployment } from './functions/deployment';
+import type { Deployment } from './functions/deployment';
+
+/**
+ * @returns the deployment from the command line args, or the first deployment if no args provided
+ */
+function getDeploymentFromArgs(): Deployment {
+    const scriptIndex = process.argv.findIndex((arg) => arg.endsWith('scripts.ts'));
+    if (scriptIndex === -1) {
+        return getDeployment(undefined, true); // first deployment is the default
+    }
+
+    const deploymentKey = process.argv[scriptIndex + 2] ?? null;
+    if (!deploymentKey) {
+        return getDeployment(undefined, true); // first deployment is the default
+    }
+
+    return getDeployment(deploymentKey, true);
+}
 
 /**
  * Execute a git command
@@ -72,7 +90,7 @@ export async function triggerUpdate() {
         return;
     }
 
-    const deployment = getDeployment(process.argv[process.argv.indexOf('update') + 1], true);
+    const deployment = getDeploymentFromArgs();
 
     console.log(chalk.blue(`[DEPLOYER] Updating ${deployment.title}...`));
     console.log(chalk.cyan(`[INFO] This tool allows you to:`));
@@ -121,12 +139,8 @@ export async function triggerUpdate() {
         await rebuildNPM(deployment, 'build', true);
 
         console.log(chalk.blue(`[DEPLOYER] Running migrations on ${deployment.title}...`))
-        const [migrateFailed, migrateLog] = await runDatabaseMigrations(
-            deployment,
-            !deployment.backup,
-            deployment.no_composer_dev || user_answers.npm_command === 'publish',
-        );
-        if (migrateFailed) {
+        const migrateResult = await runDatabaseMigrations(deployment);
+        if (migrateResult.error) {
             console.error(chalk.red(`[DEPLOYER] Failed to run migrations on ${deployment.title}`));
             return;
         }
@@ -154,7 +168,7 @@ export async function triggerImport() {
         return;
     }
 
-    const deployment = getDeployment(process.argv[process.argv.indexOf('import') + 1], true);
+    const deployment = getDeployment(process.argv[process.argv.length - 1], true);
 
     let hasConfirmed = false;
     async function promptContinue() {
@@ -404,23 +418,10 @@ export async function triggerImport() {
 //   params:
 //   deployment (optional) - deployment key, falls back to the first deployment in deployments.json
 export async function triggerMigrate() {
-    const deployment = getDeployment(process.argv[process.argv.indexOf('migrate') + 1], true);
+    const deployment = getDeploymentFromArgs();
 
     console.log(`Running migrations on ${deployment.title}...`)
-    const [migrateFailed, migrateLog] = await runDatabaseMigrations(
-        deployment,
-        !deployment.backup,
-        deployment.no_composer_dev || false,
-    );
-
-    if (migrateFailed) {
-        console.error(`Failed to run migrations on ${deployment.title}`);
-        return;
-    }
-
-    console.log(`Rebuilding views on ${deployment.title}...`)
-    await rebuildViews(deployment);
-    console.log(`\n\nDone!`)
+    await runDatabaseMigrations(deployment);
 }
 
 // npm run rebuildViews (deployment)
@@ -429,7 +430,7 @@ export async function triggerMigrate() {
 //   params:
 //   deployment (optional) - deployment key, falls back to the first deployment in deployments.json
 export async function triggerRebuildViews() {
-    const deployment = getDeployment(process.argv[process.argv.indexOf('rebuildViews') + 1], true);
+    const deployment = getDeploymentFromArgs();
 
     console.log(`Rebuilding views on ${deployment.title}...`)
     const rebuildViewsResult = await rebuildViews(deployment);
@@ -442,7 +443,7 @@ export async function triggerRebuildViews() {
 //   params:
 //   deployment (optional) - deployment key, falls back to the first deployment in deployments.json
 export async function triggerAnonymise() {
-    const deployment = getDeployment(process.argv[process.argv.indexOf('anonymise') + 1], true);
+    const deployment = getDeploymentFromArgs();
 
     console.log(`Anonymising ${deployment.title}...`)
     await anonymiseDatabase(deployment);
@@ -464,7 +465,7 @@ export async function triggerSyncDatabases() {
 //   params:
 //   deployment (optional) - deployment key, falls back to the first deployment in deployments.json
 export async function triggerRebuildUsers() {
-    const deployment = getDeployment(process.argv[process.argv.indexOf('rebuildUsers') + 1], true);
+    const deployment = getDeploymentFromArgs();
 
     console.log(`Recreating Users for ${deployment.title}...`)
     await rebuildUsers(deployment);
@@ -476,7 +477,7 @@ export async function triggerRebuildUsers() {
 //   params:
 //   deployment (optional) - deployment key, falls back to the first deployment in deployments.json
 export async function triggerRebuildForeignKeys() {
-    const deployment = getDeployment(process.argv[process.argv.indexOf('rebuildForeignKeys') + 1], true);
+    const deployment = getDeploymentFromArgs();
 
     console.log(`Recreating foreign keys for ${deployment.title}...`)
     const rebuildForeignKeysResult = await rebuildForeignKeys(deployment);
@@ -491,11 +492,11 @@ export async function triggerRebuildForeignKeys() {
 //   params:
 //   deployment (optional) - deployment key, falls back to the first deployment in deployments.json
 export async function triggerNPM() {
+    const deployment = getDeploymentFromArgs();
+
     let selected_cmd = 'build';
     if (process.argv.includes('watch')) { selected_cmd = 'watch'; }
     if (process.argv.includes('publish')) { selected_cmd = 'publish'; }
-
-    const deployment = getDeployment(process.argv[process.argv.indexOf(selected_cmd) + 1], true);
 
     console.log(`Installing NPM dependencies and running ${selected_cmd} script for ${deployment.title}...`)
     await rebuildNPM(deployment, selected_cmd);

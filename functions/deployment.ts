@@ -118,11 +118,11 @@ export function deploymentExec(options: {
 
         child.on('error', (err) => {
             result.log += `\n[EXEC] Failed to start process: ${err.message}`;
-            console.error(`[EXEC] Failed to start process: ${err.message}`);
+            console.error(`\n[EXEC] Failed to start process: ${err.message}`);
 
             if (options.errorMessage) {
                 result.log += `\n[EXEC] ${options.errorMessage}`;
-                console.error(`[EXEC] ${options.errorMessage}`);
+                console.error(`\n[EXEC] ${options.errorMessage}`);
             }
 
             result.error = new DeploymentExecError(`Failed to start process: ${err.message}`, result);
@@ -132,17 +132,17 @@ export function deploymentExec(options: {
         child.on('close', (code) => {
             if (code !== 0) {
                 result.log += `\n[EXEC] Command failed with exit code ${code}`;
-                console.error(`[EXEC] Command failed with exit code ${code}`);
+                console.error(`\n[EXEC] Command failed with exit code ${code}`);
 
                 if (options.errorMessage) {
                     result.log += `\n[EXEC] ${options.errorMessage}`;
-                    console.error(`[EXEC] ${options.errorMessage}`);
+                    console.error(`\n[EXEC] ${options.errorMessage}`);
                 }
 
                 result.error = new DeploymentExecError(`Command failed with exit code ${code}`, result);
             } else if (options.successMessage) {
                 result.log += `\n[EXEC] ${options.successMessage}`;
-                console.info(`[EXEC] ${options.successMessage}`);
+                console.info(`\n[EXEC] ${options.successMessage}`);
             }
 
             resolve(result);

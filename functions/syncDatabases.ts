@@ -164,14 +164,11 @@ export async function runSyncDatabases(fromDeployment: Deployment, toDeployment:
     // We need to run the migrations again to ensure that the database is up to date
     console.log('[SYNC] Running database migrations...')
     syncLog += "\n--- RUNNING DATABASE MIGRATIONS ---\n";
-    const [migrateFailed, migrateLog] = await runDatabaseMigrations(toDeployment, true, toDeployment.no_composer_dev || false);
-    console.log("[SYNC] Migration complete: ", migrateFailed ? "FAIL" : "SUCCESS");
-    syncLog += migrateLog;
-    syncLog += `\n\n--- DATABASE MIGRATIONS: ${migrateFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
+    const migrateResult = await runDatabaseMigrations(toDeployment);
+    syncLog += migrateResult.log;
 
-    if (migrateFailed) {
+    if (migrateResult.error) {
       writeLog(syncLog, false, "sync");
-      console.error("[SYNC] Migration failed");
       return;
     }
 

@@ -7,7 +7,7 @@
     "start": "ts-node -T index.ts",
     "update": "ts-node -T scripts.ts triggerUpdate",
     "import": "ts-node -T scripts.ts triggerImport",
-    "migrate": "ts-node -T scripts.ts runDatabaseMigrations",
+    "migrate": "ts-node -T scripts.ts triggerMigrate",
     "rebuildViews": "ts-node -T scripts.ts triggerRebuildViews",
     "rebuildUsers": "ts-node -T scripts.ts triggerRebuildUsers",
     "rebuildForeignKeys": "ts-node -T scripts.ts triggerRebuildForeignKeys",

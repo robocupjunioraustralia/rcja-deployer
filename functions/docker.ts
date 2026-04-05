@@ -14,8 +14,22 @@ export function start(deployment: Deployment, build: boolean = false): Promise<D
     return deploymentExec({
         deployment,
         command: 'docker',
-        args: ['compose', 'up', '-d', ...(build ? ['--build'] : [])],
+        args: ['compose', 'up', '-d', '--wait', ...(build ? ['--build'] : [])],
         successMessage: `[DOCKER] instance started${build ? ' (and built)' : ''}`
+    });
+}
+
+/**
+ * Stop an RCJ CMS instance
+ *
+ * @param deployment target
+ */
+export function stop(deployment: Deployment): Promise<DeploymentExecResult> {
+    return deploymentExec({
+        deployment,
+        command: 'docker',
+        args: ['compose', 'down'],
+        successMessage: `[DOCKER] instance stopped`
     });
 }
 
@@ -29,9 +43,15 @@ export function setMaintenanceMode(deployment: Deployment, enable: boolean): Pro
     return deploymentExec({
         deployment,
         command: 'docker',
-        args: ['compose', 'exec', '-T', SERVICE_APP, 'utils/setup/maintenance.php', ...(enable ? ['on'] : ['off'])],
+        args: ['compose', 'exec', '-T', SERVICE_APP, 'php', 'utils/setup/maintenance.php', ...(enable ? ['on'] : ['off'])],
         successMessage: `[DOCKER] Maintenance mode ${enable ? 'enabled' : 'disabled'}`
     });
+}
+
+type IncompatibleReleaseError = {
+    error: "incompatible_release";
+    targetReleases: string[];
+    currentRelease: string;
 }
 
 /**
@@ -39,13 +59,41 @@ export function setMaintenanceMode(deployment: Deployment, enable: boolean): Pro
  *
  * @param deployment target
  */
-export async function runMigrations(deployment: Deployment): Promise<DeploymentExecResult> {
-    return deploymentExec({
+export async function runMigrate(deployment: Deployment): Promise<DeploymentExecResult & {
+    incompatibleRelease?: IncompatibleReleaseError
+}> {
+    const result = await deploymentExec({
         deployment,
         command: 'docker',
-        args: ['compose', 'exec', '-T', SERVICE_APP, 'utils/setup/migrations.php'],
+        args: ['compose', 'exec', '-T', SERVICE_APP, 'php', 'utils/setup/migrate.php', '--deployer'],
         successMessage: `[DOCKER] Migrations completed successfully`
     });
+
+    if (result.error) {
+        /**
+         * If the migration script failed, it may be due to attempting to skip multiple versions at a time.
+         * In this case, stderr will contain a JSON struct with the releases to go through first
+         */
+        try {
+            const migrateErrorData = JSON.parse(result.stderr) as IncompatibleReleaseError | null;
+
+            if (
+                typeof migrateErrorData === 'object' &&
+                migrateErrorData !== null &&
+                "error" in migrateErrorData &&
+                migrateErrorData.error === "incompatible_release"
+            ) {
+                return {
+                    ...result,
+                    incompatibleRelease: migrateErrorData
+                };
+            }
+        } catch (err) {
+            // assume some other error occured
+        }
+    }
+
+    return result;
 }
 
 /**
@@ -53,11 +101,11 @@ export async function runMigrations(deployment: Deployment): Promise<DeploymentE
  *
  * @param deployment target
  */
-export async function rebuildViews(deployment: Deployment): Promise<DeploymentExecResult> {
+export function rebuildViews(deployment: Deployment): Promise<DeploymentExecResult> {
     return deploymentExec({
         deployment,
         command: 'docker',
-        args: ['compose', 'exec', '-T', SERVICE_APP, 'utils/setup/rebuildViews.php'],
+        args: ['compose', 'exec', '-T', SERVICE_APP, 'php', 'utils/setup/rebuildViews.php'],
         successMessage: `[DOCKER] Views rebuilt successfully`
     });
 }
@@ -67,11 +115,11 @@ export async function rebuildViews(deployment: Deployment): Promise<DeploymentEx
  *
  * @param deployment target
  */
-export async function rebuildForeignKeys(deployment: Deployment): Promise<DeploymentExecResult> {
+export function rebuildForeignKeys(deployment: Deployment): Promise<DeploymentExecResult> {
     return deploymentExec({
         deployment,
         command: 'docker',
-        args: ['compose', 'exec', '-T', SERVICE_APP, 'utils/setup/rebuildForeignKeys.php'],
+        args: ['compose', 'exec', '-T', SERVICE_APP, 'php', 'utils/setup/rebuildForeignKeys.php'],
         successMessage: `[DOCKER] Foreign keys rebuilt successfully`
     });
 }

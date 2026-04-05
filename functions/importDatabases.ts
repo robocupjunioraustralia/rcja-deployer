@@ -170,15 +170,12 @@ export async function runImportDatabases(deployment: Deployment, filePathsMain: 
     // We need to run the migrations again to ensure that the database is up to date
     console.log('[IMPORT] Running database migrations...')
     importLog += "\n--- RUNNING DATABASE MIGRATIONS ---\n";
-    const [migrateFailed, migrateLog] = await runDatabaseMigrations(deployment, true, deployment.no_composer_dev || false);
-    console.log("[IMPORT] Migration complete: ", migrateFailed ? "FAIL" : "SUCCESS");
-    importLog += migrateLog;
-    importLog += `\n\n--- DATABASE MIGRATIONS: ${migrateFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
+    const migrateResult = await runDatabaseMigrations(deployment);
+    importLog += migrateResult.log;
 
-    if (migrateFailed) {
+    if (migrateResult.error) {
       writeLog(importLog, false, "import");
-      console.error("[IMPORT] Migration failed");
-      return [migrateFailed, importLog];
+      return [true, importLog];
     }
 
     console.log('[IMPORT] Rebuilding foreign keys...')

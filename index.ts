@@ -198,16 +198,9 @@ app.post('/deploy', async (req, res) => {
     // Check for any database migrations
     console.log('[DEPLOY] Running database migrations...')
     deployLog += "\n--- RUNNING DATABASE MIGRATIONS ---\n";
-    const [migrateFailed, migrateLog] = await runDatabaseMigrations(
-      deployment,
-      !deployment.backup,
-      deployment.no_composer_dev || false
-    );
-    console.log("[DEPLOY] Migration complete: ", migrateFailed ? "FAIL" : "SUCCESS");
-    deployLog += migrateLog;
-    deployLog += `\n\n--- DATABASE MIGRATIONS: ${migrateFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
-
-    if (migrateFailed) {
+    const migrateResult = await runDatabaseMigrations(deployment);
+    deployLog += migrateResult.log;
+    if (migrateResult.error) {
       writeLog(deployLog, false, "deploy");
       return res.status(500).send('Error executing database migrations');
     }
