@@ -3,9 +3,8 @@ import fs from 'fs';
 import { spawn } from 'child_process';
 import { config } from '../config';
 import { rebuildUsers } from './rebuildUsers';
-import { rebuildForeignKeys } from './rebuildForeignKeys';
 import { runDatabaseMigrations } from './migrate';
-import { setMaintenanceMode, rebuildViews } from './docker';
+import { setMaintenanceMode, rebuildViews, rebuildForeignKeys } from './docker';
 import { writeLog } from './logging';
 import type { Deployment } from './deployment';
 
@@ -184,20 +183,20 @@ export async function runImportDatabases(deployment: Deployment, filePathsMain: 
 
     console.log('[IMPORT] Rebuilding foreign keys...')
     importLog += "\n--- REBUILDING FOREIGN KEYS ---\n";
-    const [rebuildFKeysFailed, rebuildFKeysLog] = await rebuildForeignKeys(deployment);
-    importLog += rebuildFKeysLog;
-    importLog += `\n\n--- REBUILDING FOREIGN KEYS: ${rebuildFKeysFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
+    const rebuildForeignKeysResult = await rebuildForeignKeys(deployment);
+    importLog += rebuildForeignKeysResult.log;
 
-    if (rebuildFKeysFailed) {
-      writeLog(importLog, false, "import");
-      console.error("[IMPORT] Rebuild Foreign Keys failed");
-      return [rebuildFKeysFailed, importLog];
+    if (rebuildForeignKeysResult.error) {
+        writeLog(importLog, false, "import");
+        return [true, importLog];
     }
 
     // Rebuild the views
     console.log('[IMPORT] Rebuilding views...')
     importLog += "\n--- REBUILDING VIEWS ---\n";
     const rebuildViewsResult = await rebuildViews(deployment);
+    importLog += rebuildViewsResult.log;
+
     if (rebuildViewsResult.error) {
         writeLog(importLog, false, "import");
         return [true, importLog];

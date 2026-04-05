@@ -61,3 +61,17 @@ export async function rebuildViews(deployment: Deployment): Promise<DeploymentEx
         successMessage: `[DOCKER] Views rebuilt successfully`
     });
 }
+
+/**
+ * Rebuild foreign keys for an RCJ CMS instance
+ *
+ * @param deployment target
+ */
+export async function rebuildForeignKeys(deployment: Deployment): Promise<DeploymentExecResult> {
+    return deploymentExec({
+        deployment,
+        command: 'docker',
+        args: ['compose', 'exec', '-T', SERVICE_APP, 'utils/setup/rebuildForeignKeys.php'],
+        successMessage: `[DOCKER] Foreign keys rebuilt successfully`
+    });
+}

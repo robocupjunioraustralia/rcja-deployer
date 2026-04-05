@@ -13,13 +13,12 @@ import { config } from './config';
 import { runSyncDatabases } from './functions/syncDatabases';
 import { runImportDatabases } from './functions/importDatabases';
 import { anonymiseDatabase } from './functions/anonymiseDatabase';
-import { rebuildForeignKeys } from './functions/rebuildForeignKeys';
 import { runDatabaseMigrations } from './functions/migrate';
 import { rebuildUsers } from './functions/rebuildUsers';
 import { rebuildNPM } from './functions/rebuildNPM';
 import { getDeploymentBackupDir } from "./functions/backup";
 import type { ApiBackupResult } from "./functions/backup";
-import { rebuildViews } from './functions/docker';
+import { rebuildViews, rebuildForeignKeys } from './functions/docker';
 import { getDeployment } from './functions/deployment';
 
 /**
@@ -480,7 +479,8 @@ export async function triggerRebuildForeignKeys() {
     const deployment = getDeployment(process.argv[process.argv.indexOf('rebuildForeignKeys') + 1], true);
 
     console.log(`Recreating foreign keys for ${deployment.title}...`)
-    await rebuildForeignKeys(deployment);
+    const rebuildForeignKeysResult = await rebuildForeignKeys(deployment);
+    if (rebuildForeignKeysResult.error) throw rebuildForeignKeysResult.error;
 }
 
 // npm run build (deployment)

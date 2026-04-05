@@ -1,21 +1,21 @@
 import mariadb from 'mariadb';
 import { config } from '../config';
 import { rebuildUsers } from './rebuildUsers';
-import { rebuildForeignKeys } from './rebuildForeignKeys';
 import { anonymiseDatabase } from './anonymiseDatabase';
 import { runDatabaseMigrations } from './migrate';
-import { setMaintenanceMode, rebuildViews } from './docker';
+import { setMaintenanceMode, rebuildViews, rebuildForeignKeys } from './docker';
 import { writeLog } from './logging';
+import type { Deployment } from './deployment';
 
 // This function syncronises the databases between the production and staging servers
 // All of the databases on the production server will be copied to the staging server
 // The staging server will have the same databases, but with a different prefix
-async function syncDatabases(fromDeployment, toDeployment) {
+async function syncDatabases(fromDeployment: Deployment, toDeployment: Deployment) {
     let syncLog = "";
     let syncFailed = false;
     try {
-        productionPrefix = fromDeployment.database_prefix;
-        stagingPrefix = toDeployment.database_prefix;
+        const productionPrefix = fromDeployment.database_prefix;
+        const stagingPrefix = toDeployment.database_prefix;
 
         // Connect to the MariaDB server using the login details
         const pool = mariadb.createPool({
@@ -131,7 +131,7 @@ async function syncDatabases(fromDeployment, toDeployment) {
     return [syncFailed, syncLog]
 }
 
-export async function runSyncDatabases(fromDeployment, toDeployment) {
+export async function runSyncDatabases(fromDeployment: Deployment, toDeployment: Deployment) {
     console.log(`[SYNC] Syncing ${fromDeployment.title} to ${toDeployment.title}...`);
     let syncLog = `--- SYNCING ${fromDeployment.title} TO ${toDeployment.title} ---\n`;
 
@@ -177,13 +177,11 @@ export async function runSyncDatabases(fromDeployment, toDeployment) {
 
     console.log('[SYNC] Rebuilding foreign keys...')
     syncLog += "\n--- REBUILDING FOREIGN KEYS ---\n";
-    const [rebuildFKeysFailed, rebuildFKeysLog] = await rebuildForeignKeys(toDeployment);
-    syncLog += rebuildFKeysLog;
-    syncLog += `\n\n--- REBUILDING FOREIGN KEYS: ${rebuildFKeysFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
+    const rebuildForeignKeysResult = await rebuildForeignKeys(toDeployment);
+    syncLog += rebuildForeignKeysResult.log;
 
-    if (rebuildFKeysFailed) {
+    if (rebuildForeignKeysResult.error) {
       writeLog(syncLog, false, "sync");
-      console.error("[SYNC] Rebuild Foreign Keys failed");
       return;
     }
 
@@ -204,14 +202,12 @@ export async function runSyncDatabases(fromDeployment, toDeployment) {
     // Rebuild the views
     console.log('[SYNC] Rebuilding views...')
     syncLog += "\n--- REBUILDING VIEWS ---\n";
-    const [rebuildFailed, rebuildLog] = await rebuildViews(toDeployment);
-    console.log("[SYNC] View rebuild complete: ", rebuildFailed ? "FAIL" : "SUCCESS");
-    syncLog += rebuildLog;
-    syncLog += `\n\n--- REBUILDING VIEWS: ${rebuildFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
+    const rebuildViewsResult = await rebuildViews(toDeployment);
+    console.log("[SYNC] View rebuild complete: ", rebuildViewsResult.error ? "FAIL" : "SUCCESS");
+    syncLog += rebuildViewsResult.log;
 
-    if (rebuildFailed) {
+    if (rebuildViewsResult.error) {
       writeLog(syncLog, false, "sync");
-      console.error("[SYNC] View rebuild failed");
       return;
     }
 
