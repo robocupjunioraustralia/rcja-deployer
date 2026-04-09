@@ -12,10 +12,7 @@
     "rebuildUsers": "ts-node -T scripts.ts triggerRebuildUsers",
     "rebuildForeignKeys": "ts-node -T scripts.ts triggerRebuildForeignKeys",
     "anonymise": "ts-node -T scripts.ts triggerAnonymise",
-    "syncDatabases": "ts-node -T scripts.ts triggerSyncDatabases",
-    "build": "ts-node -T scripts.ts triggerBuild",
-    "watch": "ts-node -T scripts.ts triggerWatch",
-    "publish": "ts-node -T scripts.ts triggerPublish"
+    "syncDatabases": "ts-node -T scripts.ts triggerSyncDatabases"
   },
   "author": "",
   "license": "ISC",

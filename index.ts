@@ -14,9 +14,8 @@ import { CronJob } from "cron";
 import { config } from "./config"
 import { runSyncDatabases } from './functions/syncDatabases';
 import { runDatabaseMigrations } from './functions/migrate';
-import { setMaintenanceMode } from './functions/docker';
+import { setMaintenanceMode, start } from './functions/docker';
 import { writeLog } from './functions/logging';
-import { rebuildNPM } from './functions/rebuildNPM';
 import { createDatabaseBackup, getDeploymentBackupDir } from "./functions/backup";
 import type { ApiBackupResult } from "./functions/backup";
 import { rebuildViews } from "./functions/docker";
@@ -186,14 +185,15 @@ app.post('/deploy', async (req, res) => {
     console.log(stdout, stderr);
     deployLog += `--- Successfully pulled all changes ---\n${stdout}\n${stderr}\n`;
 
-
-    // Update NPM packages and rebuild assets
-    console.log('[DEPLOY] Updating NPM packages and rebuilding assets...')
-    deployLog += "\n--- RUNNING NPM COMMANDS ---\n";
-    const [npmFailed, npmLog] = await rebuildNPM(deployment, deployment.build_cmd);
-    console.log("[DEPLOY] NPM commands complete: ", npmFailed ? "FAIL" : "SUCCESS");
-    deployLog += npmLog;
-    deployLog += `\n\n--- NPM COMMANDS: ${npmFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
+    // Build & start the instance
+    console.log('[DEPLOY] Rebuilding instance...');
+    deployLog += '\n[DEPLOY] Rebuilding instance...';
+    const initialStartResult = await start(deployment, true);
+    deployLog += initialStartResult.log;
+    if (initialStartResult.error) {
+      writeLog(deployLog, false, "deploy");
+      return res.status(500).send('Error building/starting instance');
+    }
 
     // Check for any database migrations
     console.log('[DEPLOY] Running database migrations...')

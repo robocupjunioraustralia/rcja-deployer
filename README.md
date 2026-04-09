@@ -127,14 +127,6 @@ Keep the watch script running whilst you are developing as this will automatical
 ---
 
 ### Other Commands
-#### Install NPM Dependencies and build assets
-
-There are 3 modes for building assets that you can choose from:
-- `npm run watch` - Builds the frontend for development and watches for changes *(recommended for development)*
-- `npm run build` - Builds the frontend once for development
-- `npm run publish` - Builds the frontend once for production
-
-#### Database Tools
 
 ```sh
 npm run migrate # Runs any new migration scripts in the updates folder.

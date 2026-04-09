@@ -13,15 +13,6 @@ export async function runDatabaseMigrations(deployment: Deployment): Promise<{ e
     // TODO: backup DB
     // TODO: check for version too old to migrate? (this version of the deployer NEEDS docker)
 
-    // Build & start the instance
-    console.log('[MIGRATE] Building/starting instance...');
-    migrationLog += '\n[MIGRATE] Building/starting instance...';
-    const initialStartResult = await start(deployment, true);
-    migrationLog += initialStartResult.log;
-    if (initialStartResult.error) {
-        return { error: true, log: migrationLog };
-    }
-
     // Run the migrations
     const initialMigrateResult = await runMigrate(deployment);
     migrationLog += initialMigrateResult.log;
