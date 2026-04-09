@@ -6,6 +6,7 @@
   "scripts": {
     "start": "ts-node -T index.ts",
     "anonymise": "ts-node -T tools/anonymise.ts",
+    "backup": "ts-node -T tools/backup.ts",
     "import": "ts-node -T tools/import.ts",
     "sync": "ts-node -T tools/sync.ts",
     "update": "ts-node -T functions/update.ts"
@@ -16,7 +17,6 @@
     "@faker-js/faker": "^7.6.0",
     "@sentry/node": "^7.107.0",
     "@sentry/profiling-node": "^7.107.0",
-    "archiver": "^7.0.1",
     "aws-sdk": "^2.1357.0",
     "body-parser": "^1.20.2",
     "chalk": "^4.1.2",
@@ -39,7 +39,6 @@
     "unzipper": "^0.12.3"
   },
   "devDependencies": {
-    "@types/archiver": "^7.0.0",
     "@types/express": "^5.0.6",
     "@types/fs-extra": "^11.0.4",
     "@types/morgan": "^1.9.10",

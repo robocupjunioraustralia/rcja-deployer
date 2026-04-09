@@ -7,8 +7,6 @@ import morgan from "morgan";
 import path from "path";
 import crypto from 'crypto';
 import fs from 'fs';
-import os from 'os';
-import archiver from 'archiver';
 import { spawn } from 'child_process';
 import { CronJob } from "cron";
 import { config } from "./config"
@@ -235,13 +233,13 @@ async function canExport(
 
   const requestIp = req.ip?.replace('::ffff:', '');
   if (!requestIp || !deployment.export.allowed_ips.includes(requestIp)) {
-    console.log(`[EXPORT] Request from IP "${requestIp}" not allowed for deployment "${deployment.title}"`);
+    console.warn(`[EXPORT] Request from IP "${requestIp}" not allowed for deployment "${deployment.title}"`);
     return res.sendStatus(403);
   }
 
   const authHeader = req.headers.authorization;
   if (!authHeader || authHeader.split(" ")[1] !== deployment.export.secret) {
-    console.log(`[EXPORT] Invalid secret for deployment "${deployment.title}" from IP "${req.ip}"`);
+    console.warn(`[EXPORT] Invalid secret for deployment "${deployment.title}" from IP "${req.ip}"`);
     return res.sendStatus(403);
   }
 
@@ -259,8 +257,11 @@ function cleanupExports() {
 
     // An export always ends with _export
     const existingExports = fs.readdirSync(deploymentBackupDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory() && d.name.endsWith('_export'))
-      .map((d) => ({ directory: d, stats: fs.statSync(path.join(deploymentBackupDir, d.name)) }))
+      .filter((entry) => entry.isFile() && entry.name.endsWith('_export.tar.gz'))
+      .map((file) => {
+        const filePath = path.join(deploymentBackupDir, file.name);
+        return { file, filePath, stats: fs.statSync(filePath) };
+      })
       .sort((a, b) => a.stats.mtimeMs - b.stats.mtimeMs); // oldest first
 
     // Keep up the 5 most recent exports as long as they are less than 1 day old
@@ -270,9 +271,8 @@ function cleanupExports() {
     });
 
     for (const expiredExport of expiredExports) {
-      const deletePath = path.join(deploymentBackupDir, expiredExport.directory.name);
-      console.log(`[CLEANUP] Deleting old export: ${deletePath}`);
-      fs.rmSync(deletePath, { recursive: true, force: true });
+      console.log(`[CLEANUP] Deleting old export: ${expiredExport.filePath}`);
+      fs.rmSync(expiredExport.filePath, { force: true });
     }
   }
 }
@@ -285,13 +285,10 @@ app.post('/export/:deployment_id', canExport, async (req, res) => {
 
   cleanupExports();
 
-  const { hasFailed: backupFailed, backupLog, backupName, backupFiles } = await createDatabaseBackup(deployment, false, "_export");
-  exportLog += backupLog;
+  const { result: backupResult, backupName } = await createDatabaseBackup(deployment, "_export");
+  exportLog += backupResult.log;
 
-  console.log(`[DEPLOYER] Backup complete: `, backupFailed ? "FAIL" : "SUCCESS");
-  exportLog += `\n--- BACKUP COMPLETE: ${backupFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
-
-  if (backupFailed) {
+  if (backupResult.error) {
     res.status(500).setHeader('Content-Type', 'text/plain');
     res.write(exportLog);
     res.end();
@@ -299,7 +296,7 @@ app.post('/export/:deployment_id', canExport, async (req, res) => {
   }
 
   res.status(200).setHeader('Content-Type', 'application/json');
-  res.write(JSON.stringify({ name: backupName, files: backupFiles } satisfies ApiBackupResult));
+  res.write(JSON.stringify({ name: backupName } satisfies ApiBackupResult));
   res.end();
 });
 
@@ -315,8 +312,8 @@ app.get('/export/:deployment_id/:backup_name', canExport, async (req: BackupRequ
   let backupName = req.params.backup_name;
   if (backupName === "latest") {
     const existingBackups = fs.readdirSync(deploymentBackupDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name);
+      .filter((entry) => entry.isFile())
+      .map((file) => file.name);
 
     if (existingBackups.length === 0) {
       return res.status(404).send(`No backups found for deployment "${deployment.title}"`);
@@ -325,78 +322,36 @@ app.get('/export/:deployment_id/:backup_name', canExport, async (req: BackupRequ
     backupName = existingBackups.sort().reverse()[0];
   }
 
-  const backupDir = path.join(deploymentBackupDir, backupName);
-  if (!fs.existsSync(backupDir)) {
+  const backupFile = path.join(deploymentBackupDir, backupName);
+  if (!fs.existsSync(backupFile)) {
     return res.status(404).send(`Unable to find backup "${backupName}" for deployment "${deployment.title}"`);
   }
 
-  const backupFiles = fs.readdirSync(backupDir)
-    .filter((f) => f.endsWith('.sql'))
-    .map((f) => path.join(backupDir, f));
+  console.info(`[EXPORT] Exporting backup "${backupName}"...`);
+  let exportLog = `[EXPORT] Exporting backup "${backupName}"...\n`;
 
-  // Attempt to zip the files
-  console.log(`[EXPORT] Creating zip of backup ${backupName}...`);
-  let exportLog = `[EXPORT] Creating zip of backup ${backupName}...\n`;
-
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rcja-deployer-export-'));
-  const zipName = `${deployment.database_prefix}_${backupName}_backup.zip`;
-  const zipPath = path.join(tempDir, zipName);
-  const output = fs.createWriteStream(zipPath);
-
-  const archive = archiver('zip');
-  archive.pipe(output);
-
-  for (const filePath of backupFiles) {
-    const fileName = path.basename(filePath);
-    console.log(`[EXPORT] Adding file to zip: ${filePath}`);
-    exportLog += `[EXPORT] Adding file to zip: ${fileName}\n`;
-
-    archive.file(filePath, { name: fileName });
-  }
-
-  archive.finalize();
-
-  try {
-    await new Promise((resolve, reject) => {
-      output.on('close', resolve);
-      archive.on('error', reject);
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('[EXPORT] Error creating zip file:', message);
-    exportLog += `\n[EXPORT] Error creating zip file: ${message}`;
-
-    res.status(500).setHeader('Content-Type', 'text/plain');
-    res.write(exportLog);
-    res.end();
-    return;
-  }
-
-  console.log(`[EXPORT] Created zip: ${zipPath}`);
-  exportLog += `[EXPORT] Created zip: ${zipPath}\n`;
-
-  res.attachment(zipName);
+  // send the .tar.gz backup file as an attachment
+  res.attachment(path.basename(backupFile));
   try {
     await new Promise<void>((resolve, reject) => {
-      res.sendFile(zipPath, (err) => {
+      res.sendFile(backupFile, (err) => {
         if (err) { return reject(err); }
         resolve();
       });
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[EXPORT] Error sending zip file:', message);
-    exportLog += `\n[EXPORT] Error sending zip file: ${message}`;
+    console.error('[EXPORT] Error sending backup file:', message);
+    exportLog += `\n[EXPORT] Error sending backup file: ${message}`;
 
     res.status(500).end();
     writeLog(exportLog, false, "export");
     return;
   }
 
-  console.log(`[EXPORT] Export complete`);
+  console.info(`[EXPORT] Export complete`);
   exportLog += `[EXPORT] Export complete\n`;
 
-  fs.rmSync(tempDir, { recursive: true, force: true });
   writeLog(exportLog, true, "export");
 });
 

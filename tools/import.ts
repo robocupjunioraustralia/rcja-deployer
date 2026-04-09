@@ -2,11 +2,9 @@
 import chalk from 'chalk';
 import fs from 'fs';
 import inquirer from 'inquirer';
-import os from 'os';
 import path from "path";
 import { Readable } from 'stream';
 import { finished } from 'stream/promises';
-import unzipper from 'unzipper';
 import { getDeploymentBackupDir } from "../functions/backup";
 import type { ApiBackupResult } from "../functions/backup";
 import { getDeployment } from '../functions/deployment';
@@ -33,7 +31,7 @@ async function main() {
         }
 
         console.log(chalk.redBright(`\n[WARNING] This will delete all existing local databases for this deployment`));
-        const importConfirmed = await inquirer.prompt([
+        const importConfirmed = await inquirer.prompt<{ confirm: string }>([
             {
                 type: 'input',
                 name: 'confirm',
@@ -49,30 +47,28 @@ async function main() {
     console.log(chalk.cyan(`[INFO] This tool allows you to restore your deployment's databases from a backup`));
     console.log(" ");
 
-    const { importSource } = await inquirer.prompt([
+    const { importSource } = await inquirer.prompt<{ importSource: 'local-backup' | 'local-sql' | 'remote' }>([
         {
             type: 'rawlist',
             name: 'importSource',
             message: `Select the import source to use:`,
             choices: [
                 { name: `Local - Backup created by the deployer in ./backups/${deployment.database_prefix}`, value: 'local-backup' },
-                { name: 'Local - SQL files on the local machine', value: 'local-sql' },
+                { name: 'Local - .tar.gz of SQL files on the local machine', value: 'local-sql' },
                 { name: 'Remote - Import a backup from a remote deployment', value: 'remote' },
             ],
         }
     ]);
 
-    const mainFiles = [];
-    const compFiles = [];
+    let backupFile: string | null = null;
 
     if (importSource === 'remote') {
-
         if (!deployment.import) {
             console.error(chalk.red(`\n[DEPLOYER] Remote import is not configured in deployments.json for ${deployment.title}`));
             return;
         }
 
-        const { remoteImportSource } = await inquirer.prompt([
+        const { remoteImportSource } = await inquirer.prompt<{ remoteImportSource: 'latest' | 'custom' | 'new' }>([
             {
                 type: 'rawlist',
                 name: 'remoteImportSource',
@@ -85,11 +81,11 @@ async function main() {
             }
         ]);
 
-        let backupName = null;
+        let backupName: string | null = null;
         if (remoteImportSource === 'latest') {
             backupName = 'latest';
         } else if (remoteImportSource === 'custom') {
-            const { customBackupName } = await inquirer.prompt([
+            const { customBackupName } = await inquirer.prompt<{ customBackupName: string }>([
                 {
                     type: 'input',
                     name: 'customBackupName',
@@ -133,44 +129,14 @@ async function main() {
             return;
         }
 
-        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rcja-deployer-import-'));
-        const zipPath = path.join(tempDir, `${deployment.database_prefix}_backup.zip`);
-        const fileStream = fs.createWriteStream(zipPath);
+        const formattedDate = new Date().toISOString().replaceAll(':', '-').split('.')[0];
+        const backupDir = getDeploymentBackupDir(deployment, true);
+        backupFile = path.join(backupDir, `${formattedDate}_remote.tar.gz`);
 
+        const fileStream = fs.createWriteStream(backupFile);
         await finished(Readable.fromWeb(exportResponse.body).pipe(fileStream));
 
-
-        console.log(`[DEPLOYER] Downloaded backup to ${zipPath}`);
-
-        const formattedDate = new Date().toISOString().replaceAll(':', '-').split('.')[0];
-
-        const backupDir = path.join(
-            getDeploymentBackupDir(deployment, true),
-            `${formattedDate}_remote`
-        );
-        if (!fs.existsSync(backupDir)) {
-            fs.mkdirSync(backupDir);
-        }
-
-        await fs.createReadStream(zipPath)
-            .pipe(unzipper.Extract({ path: backupDir }))
-            .promise();
-
-        console.log(`[DEPLOYER] Extracted backup to ${backupDir}`);
-
-        for (const file of fs.readdirSync(backupDir)) {
-            if (!file.endsWith('.sql')) {
-                continue;
-            }
-
-            if (file.startsWith(`${deployment.database_prefix}_main`)) {
-                mainFiles.push(path.join(backupDir, file));
-            }
-
-            if (file.startsWith(`${deployment.database_prefix}_comp`)) {
-                compFiles.push(path.join(backupDir, file));
-            }
-        }
+        console.log(`[DEPLOYER] Downloaded backup to ${backupFile}`);
     } else if (importSource === 'local-backup') {
         const deploymentBackupDir = getDeploymentBackupDir(deployment, false);
         if (!deploymentBackupDir) {
@@ -183,89 +149,59 @@ async function main() {
             .sort()
             .reverse();
 
-        const selectedBackup = await inquirer.prompt([
+        const selectedBackup = await inquirer.prompt<{ backupFile: string }>([
             {
                 type: 'rawlist',
-                name: 'backupDir',
+                name: 'backupFile',
                 message: `Select a backup to import:`,
                 choices: backupFiles,
             }
         ]);
 
-        const backupDirPath = path.join(deploymentBackupDir, selectedBackup.backupDir);
-        for (const file of fs.readdirSync(backupDirPath)) {
-            if (!file.endsWith('.sql')) {
-                continue;
-            }
-
-            if (file.startsWith(`${deployment.database_prefix}_main`)) {
-                mainFiles.push(path.join(backupDirPath, file));
-            }
-
-            if (file.startsWith(`${deployment.database_prefix}_comp`)) {
-                compFiles.push(path.join(backupDirPath, file));
-            }
-        }
+        backupFile = path.join(deploymentBackupDir, selectedBackup.backupFile);
     } else if (importSource === 'local-sql') {
         console.log(" ");
-        console.log(chalk.yellow(`[INFO] Make sure each SQL dump file has the database prefix of '${deployment.database_prefix}'`));
+        console.log(chalk.yellow(`[INFO] Make sure the .tar.gz file contains SQL table dumps named main.sql & comp_[eventId].sql`));
+        console.log(chalk.yellow(`[INFO] Each SQL table dump should not contain CREATE DATABASE or USE statements`));
 
-        const answers = await inquirer.prompt([
+        const answers = await inquirer.prompt<{ backupFile: string }>([
             {
                 type: 'input',
-                name: 'mainDBFile',
-                message: `Path to SQL dump for ${deployment.database_prefix}_main:`,
-            },
-            {
-                type: 'input',
-                name: 'compDBFile',
-                message: `Path to SQL dump for ${deployment.database_prefix}_comp:`,
+                name: 'backupFile',
+                message: `Path to .tar.gz backup file for ${deployment.database_prefix}:`,
             }
         ]);
 
-        mainFiles.push(answers.mainDBFile);
-        compFiles.push(answers.compDBFile);
+        backupFile = answers.backupFile;
     }
 
-    /** Make sure the files exist */
-    console.log(" ");
-    if (mainFiles.length === 0 && compFiles.length === 0) {
-        console.error(chalk.red(`[DEPLOYER] No database files found to import`));
+    /** Make sure the file exists */
+    console.info(" ");
+    if (backupFile === null || !fs.existsSync(backupFile)) {
+        console.error(chalk.red(`[DEPLOYER] Backup file not found: ${backupFile}`));
         return;
     }
 
-    console.log(chalk.grey(`[DEPLOYER] Files to import:`));
-    let hasInvalidFiles = false;
-    [...mainFiles, ...compFiles].forEach((file) => {
-        if (!fs.existsSync(file)) {
-            console.error(chalk.red(` - Not Found: ${file}`));
-            hasInvalidFiles = true;
-            return;
-        }
-
-        console.log(chalk.grey(` - ${file}`));
-    });
-
-    if (hasInvalidFiles) {
+    if (!backupFile.endsWith('.tar.gz')) {
+        console.error(chalk.red(`[DEPLOYER] Invalid backup file type. Expected .tar.gz`));
         return;
     }
 
     if (!(await promptContinue())) {
-        console.log(chalk.yellow(`\n[DEPLOYER] Import cancelled.`));
+        console.info(chalk.yellow(`\n[DEPLOYER] Import cancelled.`));
         return;
     }
 
-    console.log("\n");
+    console.info("\n");
 
-    console.log(chalk.blue(`[DEPLOYER] Importing databases to ${deployment.title}...`))
-    const [importFailed, importLog] = await runImportDatabases(deployment, mainFiles, compFiles);
-    if (importFailed) {
-        console.error(chalk.red(`[DEPLOYER] Failed to import databases to ${deployment.title}`));
-        return;
+    console.info(chalk.blue(`[DEPLOYER] Importing databases from ${path.basename(backupFile)} to ${deployment.title}...`))
+    const importResult = await runImportDatabases(deployment, backupFile);
+    if (importResult.error) {
+        throw importResult.error;
     }
 
-    console.log(chalk.green(`\n\nDone!`));
-    console.log(chalk.cyan(`[INFO] If this is a development environment, you may wish to run 'npm run update' next`));
+    console.info(chalk.green(`\n\nDone!`));
+    console.info(chalk.cyan(`[INFO] You may wish to run 'npm run update' next`));
 }
 
 main();

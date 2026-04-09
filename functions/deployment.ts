@@ -94,18 +94,23 @@ export function deploymentExec(options: {
     args: string[];
     successMessage?: string;
     errorMessage?: string;
+    pipeStdout?: NodeJS.WritableStream;
 }): Promise<DeploymentExecResult> {
     return new Promise((resolve) => {
         const result: DeploymentExecResult = { stdout: '', stderr: '', log: '', error: null };
 
         const child = spawn(options.command, options.args, { cwd: options.deployment.path, shell: true });
 
-        child.stdout.on('data', (chunk) => {
-            const text = chunk.toString();
-            result.stdout += text;
-            result.log += text;
-            process.stdout.write(text);
-        });
+        if (options.pipeStdout) {
+            child.stdout.pipe(options.pipeStdout);
+        } else {
+            child.stdout.on('data', (chunk) => {
+                const text = chunk.toString();
+                result.stdout += text;
+                result.log += text;
+                process.stdout.write(text);
+            });
+        }
 
         child.stderr.on('data', (chunk) => {
             const text = chunk.toString();
