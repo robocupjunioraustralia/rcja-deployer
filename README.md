@@ -115,24 +115,17 @@ npm run update
 ```
 
 The most common command you should run during development. This tool allows you to:
+- Rebuild & start the deployment (docker compose up --build)
 - Run any new migration scripts
-- Rebuild all views
-- Install NPM dependencies
-- Build assets, or actively watch for changes
 
-When you pull down changes from the repository, this script will help you ensure your database is up to date and all CSS/JS/etc assets are built correcly.
-
-Keep the watch script running whilst you are developing as this will automatically rebuild assets when you change them.
+When you pull down changes from the repository, this script will help you ensure your database is up to date and the instance is running with the latest code correctly.
 
 ---
 
 ### Other Commands
 
 ```sh
-npm run migrate # Runs any new migration scripts in the updates folder.
-npm run rebuildViews # Rebuilds all views in the database.
-npm run rebuildForeignKeys # Rebuilds all foreign keys in the database.
-npm run rebuildUsers # Rebuilds all users in the database.
+npm run import # Imports a database backup to a deployment.
 npm run anonymise # Anonymises the database.
-npm run syncDatabases # Syncronises the production database to the development database (env.SYNC_FROM_...)
+npm run sync # Syncronises the production database to the development database (env.SYNC_FROM_...)
 ```

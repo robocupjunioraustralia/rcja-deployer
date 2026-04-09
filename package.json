@@ -5,14 +5,10 @@
   "main": "index.ts",
   "scripts": {
     "start": "ts-node -T index.ts",
-    "update": "ts-node -T scripts.ts triggerUpdate",
-    "import": "ts-node -T scripts.ts triggerImport",
-    "migrate": "ts-node -T scripts.ts triggerMigrate",
-    "rebuildViews": "ts-node -T scripts.ts triggerRebuildViews",
-    "rebuildUsers": "ts-node -T scripts.ts triggerRebuildUsers",
-    "rebuildForeignKeys": "ts-node -T scripts.ts triggerRebuildForeignKeys",
-    "anonymise": "ts-node -T scripts.ts triggerAnonymise",
-    "syncDatabases": "ts-node -T scripts.ts triggerSyncDatabases"
+    "anonymise": "ts-node -T tools/anonymise.ts",
+    "import": "ts-node -T tools/import.ts",
+    "sync": "ts-node -T tools/sync.ts",
+    "update": "ts-node -T functions/update.ts"
   },
   "author": "",
   "license": "ISC",
@@ -32,7 +28,6 @@
     "fs": "^0.0.1-security",
     "fs-extra": "^11.2.0",
     "inquirer": "^13.3.2",
-    "make-runnable": "^1.4.1",
     "mariadb": "^3.5.1",
     "morgan": "^1.10.0",
     "mysql": "^2.18.1",
