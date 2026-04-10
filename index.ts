@@ -323,6 +323,12 @@ app.get('/export/:deployment_id/:backup_name', canExport, async (req: BackupRequ
   }
 
   const backupFile = path.join(deploymentBackupDir, backupName);
+
+  // prevent path traversal
+  if (!backupFile.startsWith(deploymentBackupDir)) {
+    return res.status(400).send('Invalid backup name');
+  }
+
   if (!fs.existsSync(backupFile)) {
     return res.status(404).send(`Unable to find backup "${backupName}" for deployment "${deployment.title}"`);
   }
