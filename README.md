@@ -12,7 +12,6 @@ The following software is required for the various functions of this tool to wor
 *Listed versions are the minimum required version, later versions may also work.*
 - NodeJS (https://nodejs.org/en/download) `20.x.x LTS`
 - PHP (https://www.php.net/downloads) `8.2`
-- MariaDB (https://mariadb.org/download) `10.6` (Including MySQL/MariaDB Dump)
 
 ## Installation
 
@@ -27,12 +26,6 @@ The following software is required for the various functions of this tool to wor
 
 - The `.env` file contains sensitive information and should not be committed to the repository.
 - Copy the contents of `.env.example` to a new `.env`, then populate it with your own settings.
-
-The following variables must be set for the deployment scripts to work.
-| Variable | Description |
-| --- | --- |
-| DB_HOST<br>DB_USER<br>DB_PASSWORD | Details for the MariaDB server with a working instance of the RCJ CMS |
-| NPM_PATH<br>PHP_PATH<br>MYSQL_PATH<br>MYSQLDUMP_PATH | The paths to your npm, php, mysql, and mysqldump executables.<br>There are some suggestions in the sample file for windows/linux |
 
 Some other variables of note include: (these are only required if you want to run the full server with `npm start`)
 | Variable | Description |
@@ -55,11 +48,8 @@ The sample included is meant for a full deployment, for a development instance o
     "develop" : {
         "title": "RCJ CMS - Development",
         "path": "C:/xampp/htdocs/rcj_cms/",
-        "migration_folder": "updates",
-        "database_prefix": "rcj_cms",
         "repository": "robocupjunioraustralia/rcj_cms",
         "pull_cmd": "git fetch --all && git pull git status",
-        "build_cmd": "build",
         "backup": true,
         "run_nightly": true,
         "branch_ref": "refs/heads/develop",
@@ -72,14 +62,11 @@ Here's a quick explanation of each variable:
 | --- | --- |
 | *title | The name of the deployment |
 | *path | The local path to the deployment files |
-| *migration_folder | The folder containing database migration scripts |
-| *database_prefix | The prefix of the MySQL databases used by the deployment |
 | *repository | The GitHub repository containing the deployment files |
 | *pull_cmd | The command to use to pull latest changes from the repository |
-| *build_cmd | The npm script to build assets, "build" (dev) or "publish" (prod) |
+| branch_ref | The git ref for confirming the branch sent from the the webhook |
 | backup | Whether or not to backup the database before running migrations |
 | run_nightly | Whether or not to run the nightly script on this deployment |
-| branch_ref | The git ref for confirming the branch sent from the the webhook |
 
 
 ---

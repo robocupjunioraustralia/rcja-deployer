@@ -14,7 +14,7 @@ export function getDeploymentBackupDir(deployment: Deployment, makeIfMissing: bo
         fs.mkdirSync(backupFolder);
     }
 
-    const deploymentBackupFolder = path.join(backupFolder, deployment.database_prefix);
+    const deploymentBackupFolder = path.join(backupFolder, deployment.key);
     if (!fs.existsSync(deploymentBackupFolder)) {
         if (!makeIfMissing) {
             return null;

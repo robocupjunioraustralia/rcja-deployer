@@ -16,20 +16,15 @@ export type DeploymentExecResult = {
 }
 
 export type Deployment = {
+    key: string;
     /** name of the deployment */
     title: string;
     /** local path to the deployment files (where docker-compose.yml/package.json is located) */
     path: string;
-    /** the folder which contains migration scripts (should be "updates") */
-    migration_folder: string;
-    /** the prefix of the databases used by the deployment (e.g. "rcj_cms") */
-    database_prefix: string;
     /** git repository for the deployment */
     repository: string;
     /** the command to use to pull the latest changes */
     pull_cmd: string;
-    /** the npm script to build assets, "build" for dev, "publish" for prod */
-    build_cmd: string;
     /** the git ref for confirming the branch sent from the webhook */
     branch_ref?: string;
     /** whether or not to backup the database before running migrations */
@@ -54,12 +49,18 @@ export type Deployment = {
  */
 export function getAllDeployments(): Record<string, Deployment> {
     const deploymentsConfig = readFileSync(path.join(__dirname, '../deployments.json'), 'utf8');
-    const deployments: unknown = JSON.parse(deploymentsConfig);
-    if (typeof deployments !== 'object' || deployments === null) {
+    const parsedConfig: unknown = JSON.parse(deploymentsConfig);
+    if (typeof parsedConfig !== 'object' || parsedConfig === null) {
         throw new Error('Invalid deployments configuration');
     }
 
-    return deployments as Record<string, Deployment>;
+    // set .key for each deployment based on the key in deployments.json
+    const deployments = parsedConfig as Record<string, Deployment>;
+    for (const [key, deployment] of Object.entries(deployments)) {
+        deployment.key = key;
+    }
+
+    return deployments;
 }
 
 /**

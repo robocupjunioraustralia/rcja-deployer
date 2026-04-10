@@ -205,6 +205,18 @@ app.post('/deploy', async (req, res) => {
       return res.status(500).send('Error building/starting instance');
     }
 
+    if (deployment.backup) {
+      // backup the database before running migrations
+      console.log('[DEPLOY] Backing up database...');
+      deployLog += '\n[DEPLOY] Backing up database...';
+      const backupResult = await createDatabaseBackup(deployment, false);
+      deployLog += backupResult.result.log;
+      if (backupResult.result.error) {
+        writeLog(deployLog, false, "deploy");
+        return res.status(500).send('Error backing up database');
+      }
+    }
+
     // Check for any database migrations
     console.log('[DEPLOY] Running database migrations...')
     deployLog += "\n--- RUNNING DATABASE MIGRATIONS ---\n";

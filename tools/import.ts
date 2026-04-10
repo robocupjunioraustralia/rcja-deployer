@@ -48,7 +48,7 @@ async function main() {
             name: 'importSource',
             message: `Select the import source to use:`,
             choices: [
-                { name: `Local - Backup created by the deployer in ./backups/${deployment.database_prefix}`, value: 'local-backup' },
+                { name: `Local - Backup created by the deployer in ./backups/${deployment.key}`, value: 'local-backup' },
                 { name: 'Local - .tar.gz of SQL files on the local machine', value: 'local-sql' },
                 { name: 'Remote - Import a backup from a remote deployment', value: 'remote' },
             ],
@@ -163,7 +163,7 @@ async function main() {
             {
                 type: 'input',
                 name: 'backupFile',
-                message: `Path to .tar.gz backup file for ${deployment.database_prefix}:`,
+                message: `Path to .tar.gz backup file for ${deployment.title}:`,
             }
         ]);
 

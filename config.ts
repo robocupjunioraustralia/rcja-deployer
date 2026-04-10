@@ -19,17 +19,6 @@ type Env = {
     /** A Sentry DSN if using Sentry for error reporting */
     SENTRY_DSN?: string;
 
-    /** Database configuration for all RCJ CMS deployments */
-    DB_HOST: string;
-    DB_USER: string;
-    DB_PASSWORD: string;
-
-    /** Paths to required executables */
-    NPM_PATH: string;
-    PHP_PATH: string;
-    MYSQL_PATH: string;
-    MYSQLDUMP_PATH: string;
-
     /** When using the sync function, the deployment key to sync from */
     SYNC_FROM_DEPLOYMENT: string;
     /** When using the sync function, the deployment key to sync to */
