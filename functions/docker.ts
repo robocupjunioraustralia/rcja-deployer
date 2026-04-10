@@ -2,7 +2,6 @@ import { deploymentExec } from './deployment';
 import type { Deployment, DeploymentExecResult } from './deployment';
 
 const SERVICE_APP = 'app';
-const SERVICE_DB = 'db';
 
 /**
  * Start an RCJ CMS instance, optionally building it first
@@ -94,34 +93,6 @@ export async function runMigrate(deployment: Deployment): Promise<DeploymentExec
     }
 
     return result;
-}
-
-/**
- * Rebuild views for an RCJ CMS instance
- *
- * @param deployment target
- */
-export function rebuildViews(deployment: Deployment): Promise<DeploymentExecResult> {
-    return deploymentExec({
-        deployment,
-        command: 'docker',
-        args: ['compose', 'exec', '-T', SERVICE_APP, 'php', 'utils/setup/rebuildViews.php'],
-        successMessage: `[DOCKER] Views rebuilt successfully`
-    });
-}
-
-/**
- * Rebuild foreign keys for an RCJ CMS instance
- *
- * @param deployment target
- */
-export function rebuildForeignKeys(deployment: Deployment): Promise<DeploymentExecResult> {
-    return deploymentExec({
-        deployment,
-        command: 'docker',
-        args: ['compose', 'exec', '-T', SERVICE_APP, 'php', 'utils/setup/rebuildForeignKeys.php'],
-        successMessage: `[DOCKER] Foreign keys rebuilt successfully`
-    });
 }
 
 /**
