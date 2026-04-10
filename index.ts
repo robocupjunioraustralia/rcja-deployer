@@ -275,9 +275,11 @@ function cleanupExports() {
       continue;
     }
 
+    const suffixes = ['_export.tar.gz', '_sync.tar.gz'];
+
     // An export always ends with _export
     const existingExports = fs.readdirSync(deploymentBackupDir, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && entry.name.endsWith('_export.tar.gz'))
+      .filter((entry) => entry.isFile() && suffixes.some(suffix => entry.name.endsWith(suffix)))
       .map((file) => {
         const filePath = path.join(deploymentBackupDir, file.name);
         return { file, filePath, stats: fs.statSync(filePath) };
