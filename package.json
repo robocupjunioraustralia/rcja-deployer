@@ -9,7 +9,7 @@
     "backup": "ts-node -T tools/backup.ts",
     "import": "ts-node -T tools/import.ts",
     "sync": "ts-node -T tools/sync.ts",
-    "update": "ts-node -T functions/update.ts"
+    "update": "ts-node -T tools/update.ts"
   },
   "author": "",
   "license": "ISC",

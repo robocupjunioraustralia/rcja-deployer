@@ -1,4 +1,3 @@
-
 import chalk from 'chalk';
 import fs from 'fs';
 import inquirer from 'inquirer';
@@ -7,9 +6,8 @@ import { Readable } from 'stream';
 import { finished } from 'stream/promises';
 import { getDeploymentBackupDir } from "../functions/backup";
 import type { ApiBackupResult } from "../functions/backup";
-import { getDeployment } from '../functions/deployment';
-import { runImportDatabases } from '../functions/importDatabases';
-import { checkUpToDate } from './utils';
+import { checkUpToDate, getDeploymentFromArgs } from './utils';
+import { importBackup } from '../functions/docker';
 
 /**
  * Interactive CLI tool
@@ -18,11 +16,8 @@ import { checkUpToDate } from './utils';
  * CAUTION: This will overwrite the target databases
  */
 async function main() {
-    if (!(await checkUpToDate())) {
-        return;
-    }
-
-    const deployment = getDeployment(process.argv[process.argv.length - 1], true);
+    if (!(await checkUpToDate())) return;
+    const deployment = getDeploymentFromArgs();
 
     let hasConfirmed = false;
     async function promptContinue() {
@@ -145,7 +140,7 @@ async function main() {
         }
 
         const backupFiles = fs.readdirSync(deploymentBackupDir, { withFileTypes: true })
-            .filter((d) => d.isDirectory())
+            .filter((file) => file.isFile() && file.name.endsWith('.tar.gz'))
             .sort()
             .reverse();
 
@@ -195,12 +190,13 @@ async function main() {
     console.info("\n");
 
     console.info(chalk.blue(`[DEPLOYER] Importing databases from ${path.basename(backupFile)} to ${deployment.title}...`))
-    const importResult = await runImportDatabases(deployment, backupFile);
+    const backupFileStream = fs.createReadStream(backupFile);
+    const importResult = await importBackup(deployment, backupFileStream);
     if (importResult.error) {
         throw importResult.error;
     }
 
-    console.info(chalk.green(`\n\nDone!`));
+    console.info(chalk.green(`Done!`));
     console.info(chalk.cyan(`[INFO] You may wish to run 'npm run update' next`));
 }
 

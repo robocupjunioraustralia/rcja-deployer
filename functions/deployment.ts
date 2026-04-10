@@ -94,12 +94,25 @@ export function deploymentExec(options: {
     args: string[];
     successMessage?: string;
     errorMessage?: string;
+    pipeInput?: NodeJS.ReadableStream;
     pipeStdout?: NodeJS.WritableStream;
 }): Promise<DeploymentExecResult> {
     return new Promise((resolve) => {
         const result: DeploymentExecResult = { stdout: '', stderr: '', log: '', error: null };
 
         const child = spawn(options.command, options.args, { cwd: options.deployment.path, shell: true });
+
+        if (options.pipeInput) {
+            options.pipeInput.pipe(child.stdin);
+
+            options.pipeInput.on('error', (err) => {
+                result.log += `\n[EXEC] Error in input stream: ${err.message}`;
+                console.error(`\n[EXEC] Error in input stream: ${err.message}`);
+                child.kill();
+                result.error = new DeploymentExecError(`Error in input stream: ${err.message}`, result);
+                resolve(result);
+            });
+        }
 
         if (options.pipeStdout) {
             child.stdout.pipe(options.pipeStdout);

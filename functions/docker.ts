@@ -128,7 +128,7 @@ export function rebuildForeignKeys(deployment: Deployment): Promise<DeploymentEx
  * Backup an RCJ CMS instance
  *
  * @param deployment target
- * @param writeStream The stream to write the backup zip file to
+ * @param writeStream The stream to write the backup file to
  */
 export function backup(deployment: Deployment, writeStream: NodeJS.WritableStream): Promise<DeploymentExecResult> {
     return deploymentExec({
@@ -137,5 +137,21 @@ export function backup(deployment: Deployment, writeStream: NodeJS.WritableStrea
         args: ['compose', 'exec', '-T', SERVICE_APP, 'php', 'utils/setup/backup.php'],
         successMessage: `[DOCKER] Backup completed successfully`,
         pipeStdout: writeStream
+    });
+}
+
+/**
+ * Import a backup to an RCJ CMS instance
+ *
+ * @param deployment target
+ * @param readStream The stream to read the backup file from
+ */
+export function importBackup(deployment: Deployment, readStream: NodeJS.ReadableStream): Promise<DeploymentExecResult> {
+    return deploymentExec({
+        deployment,
+        command: 'docker',
+        args: ['compose', 'exec', '-T', SERVICE_APP, 'php', 'utils/setup/import.php'],
+        successMessage: `[DOCKER] Import completed successfully`,
+        pipeInput: readStream
     });
 }
