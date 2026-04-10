@@ -13,7 +13,7 @@ export function start(deployment: Deployment, build: boolean = false): Promise<D
     return deploymentExec({
         deployment,
         command: 'docker',
-        args: ['compose', 'up', '-d', '--wait', ...(build ? ['--build'] : [])],
+        args: ['compose', 'up', '-d', '-V', '--wait', ...(build ? ['--build'] : [])],
         successMessage: `[DOCKER] instance started${build ? ' (and built)' : ''}`
     });
 }
