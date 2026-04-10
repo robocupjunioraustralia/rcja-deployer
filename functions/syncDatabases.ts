@@ -22,11 +22,10 @@ export async function syncDatabases(source: Deployment, target: Deployment): Pro
     }
 
     // export the databases from the source deployment
-    // TODO: anonymised backup
     console.info('[SYNC] Backing up source deployment...')
     syncLog += "\n[SYNC] Backing up source deployment...\n";
 
-    const backupResult = await createDatabaseBackup(source, "_sync");
+    const backupResult = await createDatabaseBackup(source, true, "_sync");
     syncLog += backupResult.result.log;
     if (backupResult.result.error) {
         return { error: true, log: syncLog };

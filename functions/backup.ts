@@ -28,10 +28,11 @@ export function getDeploymentBackupDir(deployment: Deployment, makeIfMissing: bo
 /**
  * Create a backup of the deployment's databases
  * @param deployment target
+ * @param anonymise Whether to anonymise the backup
  * @param suffix optional suffix to add to the backup's name
  * @returns
  */
-export async function createDatabaseBackup(deployment: Deployment, suffix = ""): Promise<{
+export async function createDatabaseBackup(deployment: Deployment, anonymise: boolean, suffix = ""): Promise<{
     result: DeploymentExecResult;
     backupName: string;
     backupDir: string;
@@ -43,7 +44,7 @@ export async function createDatabaseBackup(deployment: Deployment, suffix = ""):
     const backupFile = path.join(backupDir, `${backupName}.tar.gz`);
 
     const backupFileStream = fs.createWriteStream(backupFile);
-    const backupResult = await backup(deployment, backupFileStream);
+    const backupResult = await backup(deployment, anonymise, backupFileStream);
 
     return {
         result: backupResult,

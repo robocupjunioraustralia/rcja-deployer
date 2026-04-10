@@ -293,7 +293,7 @@ app.post('/export/:deployment_id', canExport, async (req, res) => {
 
   cleanupExports();
 
-  const { result: backupResult, backupName } = await createDatabaseBackup(deployment, "_export");
+  const { result: backupResult, backupName } = await createDatabaseBackup(deployment, true, "_export");
   exportLog += backupResult.log;
 
   if (backupResult.error) {

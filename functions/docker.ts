@@ -99,13 +99,14 @@ export async function runMigrate(deployment: Deployment): Promise<DeploymentExec
  * Backup an RCJ CMS instance
  *
  * @param deployment target
+ * @param anonymise Whether to anonymise the backup
  * @param writeStream The stream to write the backup file to
  */
-export function backup(deployment: Deployment, writeStream: NodeJS.WritableStream): Promise<DeploymentExecResult> {
+export function backup(deployment: Deployment, anonymise: boolean, writeStream: NodeJS.WritableStream): Promise<DeploymentExecResult> {
     return deploymentExec({
         deployment,
         command: 'docker',
-        args: ['compose', 'exec', '-T', SERVICE_APP, 'php', 'utils/setup/backup.php'],
+        args: ['compose', 'exec', '-T', SERVICE_APP, 'php', 'utils/setup/backup.php', ...(anonymise ? ['--anonymise'] : [])],
         successMessage: `[DOCKER] Backup completed successfully`,
         pipeStdout: writeStream
     });

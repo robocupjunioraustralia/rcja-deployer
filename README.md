@@ -32,8 +32,6 @@ The following variables must be set for the deployment scripts to work.
 | Variable | Description |
 | --- | --- |
 | DB_HOST<br>DB_USER<br>DB_PASSWORD | Details for the MariaDB server with a working instance of the RCJ CMS |
-| DB_CACHE_NAME | Required for the anonymise function.<br>The name of the MySQL database to use for caching names.<br>If you wish to use this, create an empty database using the specificed name, and populate it using the schema in db.sql. |
-| | |
 | NPM_PATH<br>PHP_PATH<br>MYSQL_PATH<br>MYSQLDUMP_PATH | The paths to your npm, php, mysql, and mysqldump executables.<br>There are some suggestions in the sample file for windows/linux |
 
 Some other variables of note include: (these are only required if you want to run the full server with `npm start`)
@@ -42,7 +40,6 @@ Some other variables of note include: (these are only required if you want to ru
 | DEPLOY_SECRET | Secret used for authenticating requests from GitHub |
 | SMTP_* | Email configuration details for deployment alerts |
 | SYNC_FROM_DEPLOYMENT<br>SYNC_TO_DEPLOYMENT | The deployment to sync from and to.<br>This is used by the full server to sync the staging server with production each night |
-| ANON_PASSWORD | The (unhashed) password that will be set for every user after anonymisation. This may be useful for testing. It isn't required. |
 | REGO_DEPLOY_SCRIPT | Path to the rego deploy script, e.g. /home/apps/rcja-registration/deploy.sh |
 | REGO_DEPLOY_SECRET | Secret used for authenticating requests from rego GitHub |
 | SENTRY_DSN | The sentry DSN used when initialising Sentry |
@@ -126,6 +123,5 @@ When you pull down changes from the repository, this script will help you ensure
 
 ```sh
 npm run import # Imports a database backup to a deployment.
-npm run anonymise # Anonymises the database.
 npm run sync # Syncronises the production database to the development database (env.SYNC_FROM_...)
 ```

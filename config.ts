@@ -24,15 +24,6 @@ type Env = {
     DB_USER: string;
     DB_PASSWORD: string;
 
-    /**
-     * Required for the anonymise function.
-     * The name of the MySQL database to use for caching names.
-     * If you wish to use this, create an empty database using the specificed name, and populate it using the schema in db.sql
-     */
-    DB_CACHE_NAME?: string;
-    /** The (unhashed) password that will be set for every user after anonymisation. This may be useful for testing. It isn't required. */
-    ANON_PASSWORD: string;
-
     /** Paths to required executables */
     NPM_PATH: string;
     PHP_PATH: string;
