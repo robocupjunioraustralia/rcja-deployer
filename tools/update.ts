@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import inquirer from 'inquirer';
-import { start, } from '../functions/docker';
+import { start, stop, } from '../functions/docker';
 import { runDatabaseMigrations } from '../functions/migrate';
 import { getDeploymentFromArgs, checkUpToDate } from './utils';
 
@@ -26,6 +26,11 @@ async function main() {
     // build if necessary
     if (answer.build) {
         console.info(chalk.yellow('Rebuilding instance...'));
+        const stopResult = await stop(deployment);
+        if (stopResult.error) {
+            throw stopResult.error;
+        }
+
         const startResult = await start(deployment, true);
         if (startResult.error) {
             throw startResult.error;

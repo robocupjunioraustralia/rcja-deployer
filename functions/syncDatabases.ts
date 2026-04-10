@@ -1,215 +1,67 @@
-import mariadb from 'mariadb';
-import { config } from '../config';
-import { rebuildUsers } from './rebuildUsers';
-import { anonymiseDatabase } from './anonymiseDatabase';
-import { runDatabaseMigrations } from './migrate';
-import { setMaintenanceMode, rebuildViews, rebuildForeignKeys } from './docker';
-import { writeLog } from './logging';
+import { createReadStream } from 'node:fs';
+import { createDatabaseBackup } from './backup';
 import type { Deployment } from './deployment';
+import { setMaintenanceMode, importBackup } from './docker';
+import { runDatabaseMigrations } from './migrate';
 
-// This function syncronises the databases between the production and staging servers
-// All of the databases on the production server will be copied to the staging server
-// The staging server will have the same databases, but with a different prefix
-async function syncDatabases(fromDeployment: Deployment, toDeployment: Deployment) {
-    let syncLog = "";
-    let syncFailed = false;
-    try {
-        const productionPrefix = fromDeployment.database_prefix;
-        const stagingPrefix = toDeployment.database_prefix;
-
-        // Connect to the MariaDB server using the login details
-        const pool = mariadb.createPool({
-            host: config.DB_HOST,
-            user: config.DB_USER,
-            password: config.DB_PASSWORD
-        });
-        const conn = await pool.getConnection();
-        console.log("[SYNC] Connected to MariaDB server")
-        syncLog += "\n[SYNC] Connected to MariaDB server"
-
-        // Retrieve the list of databases attached to the MariaDB server
-        const result = await conn.query('SELECT SCHEMA_NAME FROM information_schema.SCHEMATA');
-        console.log("[SYNC] Found " + result.length + " databases on the server")
-        syncLog += "\n[SYNC] Found " + result.length + " databases on the server"
-
-        // To ensure a full sync, we must delete all of the staging databases.
-        // The main db must be deleted last, as it has foreign key links with the comp dbs
-        for (const row of result) {
-            const dbName = row.SCHEMA_NAME;
-            const isComp = dbName.startsWith(stagingPrefix + '_comp_');
-            if (isComp) {
-                // await conn.query("SET FOREIGN_KEY_CHECKS = 0");
-                const dropResult = await conn.query(`DROP DATABASE IF EXISTS ${dbName}`);
-                const dropRemainingResult = await conn.query('SHOW DATABASES LIKE "' + dbName + '"');
-                // await conn.query("SET FOREIGN_KEY_CHECKS = 1");
-                console.log(`[SYNC] Dropped old database (init) ${dbName}: ${dropResult.warningStatus} warnings, ${dropResult.affectedRows} rows affected, ${dropRemainingResult.length} remaining`)
-                syncLog += `\n[SYNC] Dropped old database (init) ${dbName}: ${dropResult.warningStatus} warnings, ${dropResult.affectedRows} rows affected, ${dropRemainingResult.length} remaining`
-            }
-        }
-
-        // await conn.query("SET FOREIGN_KEY_CHECKS = 0");
-        const dropMainResult = await conn.query(`DROP DATABASE IF EXISTS ${stagingPrefix}_main`);
-        const dropMainRemainingResult = await conn.query('SHOW DATABASES LIKE "' + stagingPrefix + '_main"');
-        // await conn.query("SET FOREIGN_KEY_CHECKS = 1");
-        console.log(`[SYNC] Dropped old database (init) ${stagingPrefix}_main: ${dropMainResult.warningStatus} warnings, ${dropMainResult.affectedRows} rows affected, ${dropMainRemainingResult.length} remaining`)
-        syncLog += `\n[SYNC] Dropped old database (init) ${stagingPrefix}_main: ${dropMainResult.warningStatus} warnings, ${dropMainResult.affectedRows} rows affected, ${dropMainRemainingResult.length} remaining`
-
-        // Loop through each of the databases
-        for (const row of result) {
-            const dbName = row.SCHEMA_NAME;
-
-            // Determine whether it's a main database or a comp database
-            const isMain = dbName == productionPrefix + '_main';
-            const isComp = dbName.startsWith(productionPrefix + '_comp_');
-
-            // The rest of the script should only be run on main and comp databases from the prod set
-            if (!isMain && !isComp) { continue; }
-
-            // These values are for "main" databases, comp databases will overwrite them
-            let newDbName = dbName.replace(productionPrefix, stagingPrefix);
-
-            console.log(`\n[SYNC] Found ${dbName}`)
-            syncLog += `\n\n[SYNC] Found ${dbName}`
-
-            if (isComp) {
-                const compId = dbName.replace(productionPrefix + '_comp_', '');
-                await conn.query(`USE ${productionPrefix}_main;`)
-                const compResult = await conn.query(`SELECT * FROM ${productionPrefix}_main.comps WHERE uid = ?`, [compId]);
-
-                if (compResult.length == 0) {
-                    console.log(`[SYNC] WARNING: Comp database ${dbName} has no entry in the origin comps table`)
-                    syncLog += `\n[SYNC] WARNING: Comp database ${dbName} has no entry in the origin comps table`
-                    continue;
-                }
-
-                await conn.query(`DROP USER IF EXISTS '${stagingPrefix + '_' + compId + '_lp'}'@'localhost'`);
-                await conn.query(`DROP USER IF EXISTS '${stagingPrefix + '_' + compId + '_hp'}'@'localhost'`);
-            }
-
-            await conn.query(`CREATE DATABASE ${newDbName}`);
-            await conn.query(`USE ${newDbName}`);
-
-            console.log(`[SYNC] Created new database ${newDbName}`)
-            syncLog += `\n[SYNC] Created new database ${newDbName}`
-
-            // Retrieve the list of tables in the main database
-            const tableResult = await conn.query(`SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = '${dbName}'`);
-
-            // Loop through each of the tables, copying them to the new database
-            for (const table of [...tableResult]) {
-                const tableName = table.TABLE_NAME;
-
-                // ensure current table is not a view
-                const isView = await conn.query(`SELECT TABLE_NAME FROM information_schema.VIEWS WHERE TABLE_SCHEMA = '${dbName}' AND TABLE_NAME = '${tableName}'`);
-                if (isView.length > 0) { continue; }
-
-                // console.log(`[SYNC] Copying table to ${newDbName} (${table.TABLE_NAME})`)
-                // syncLog += `\n[SYNC] Copying table to ${newDbName} (${table.TABLE_NAME})`
-
-                await conn.query(`DROP TABLE IF EXISTS ${tableName}`);
-                await conn.query(`CREATE TABLE ${tableName} LIKE ${dbName}.${tableName}`);
-                await conn.query(`INSERT INTO ${tableName} SELECT * FROM ${dbName}.${tableName}`);
-            }
-
-            console.log(`[SYNC] Finished syncing ${tableResult.length} tables to ${isMain ? 'MAIN' : 'COMP'} database ${newDbName}`)
-            syncLog += `\n[SYNC] Finished syncing ${tableResult.length} tables to ${isMain ? 'MAIN' : 'COMP'} database ${newDbName}`
-        }
-
-        console.log("[SYNC] Finished syncing databases")
-        syncLog += "\n[SYNC] Finished syncing databases"
-
-        // Disconnect from the MariaDB server
-        conn.release();
-        await pool.end();
-    } catch (err) {
-        console.error(err);
-        syncFailed = true;
-        syncLog += "\n[SYNC] Failed to sync databases"
-        syncLog += "\n[SYNC] Error: " + err
-    }
-
-    return [syncFailed, syncLog]
-}
-
-export async function runSyncDatabases(fromDeployment: Deployment, toDeployment: Deployment) {
-    console.log(`[SYNC] Syncing ${fromDeployment.title} to ${toDeployment.title}...`);
-    let syncLog = `--- SYNCING ${fromDeployment.title} TO ${toDeployment.title} ---\n`;
-
-    setMaintenanceMode(toDeployment, true);
+/**
+ * Syncronise the databases between two different instances
+ * @param source The deployment to copy from
+ * @param target The deployment to copy to
+ * @returns results
+ */
+export async function syncDatabases(source: Deployment, target: Deployment): Promise<{ error: boolean; log: string; }> {
+    console.info(`[SYNC] Syncing ${source.title} to ${target.title}...`);
+    let syncLog = `[SYNC] Syncing ${source.title} to ${target.title}...\n`;
     syncLog += `\n[SYNC] Started on ${new Date().toISOString()}\n\n`;
 
-    const [syncFailed, newSyncLog] = await syncDatabases(fromDeployment, toDeployment);
-    syncLog += newSyncLog;
-    syncLog += `\n\n--- SYNC: ${syncFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
-
-    if (syncFailed) {
-      writeLog(syncLog, false, "sync");
-      console.log("[SYNC] Sync failed");
-      return;
+    const maintenanceEnableResult = await setMaintenanceMode(target, true);
+    syncLog += maintenanceEnableResult.log;
+    if (maintenanceEnableResult.error) {
+        return { error: true, log: syncLog };
     }
 
-    console.log('[SYNC] Recreating database users...')
-    syncLog += "\n--- RECREATING DATABASE UESRS ---\n";
-    const [rebuildUsersFailed, rebuildUsersLog] = await rebuildUsers(toDeployment);
-    syncLog += rebuildUsersLog;
-    syncLog += `\n\n--- REBUILD UESRS: ${rebuildUsersFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
+    // export the databases from the source deployment
+    // TODO: anonymised backup
+    console.info('[SYNC] Backing up source deployment...')
+    syncLog += "\n[SYNC] Backing up source deployment...\n";
 
-    if (rebuildUsersFailed) {
-      writeLog(syncLog, false, "sync");
-      console.error("[SYNC] Rebuild Users Failed");
-      return;
+    const backupResult = await createDatabaseBackup(source, "_sync");
+    syncLog += backupResult.result.log;
+    if (backupResult.result.error) {
+        return { error: true, log: syncLog };
     }
 
-    // Because we have copied from production, some database changes might not have been applied
-    // We need to run the migrations again to ensure that the database is up to date
-    console.log('[SYNC] Running database migrations...')
-    syncLog += "\n--- RUNNING DATABASE MIGRATIONS ---\n";
-    const migrateResult = await runDatabaseMigrations(toDeployment);
+    // import that backup to the target deployment
+    console.info('[SYNC] Importing backup to target deployment...')
+    syncLog += "\n[SYNC] Importing backup to target deployment...\n";
+
+    const backupFileStream = createReadStream(backupResult.backupFile);
+    const importResult = await importBackup(target, backupFileStream);
+    syncLog += importResult.log;
+    if (importResult.error) {
+        return { error: true, log: syncLog };
+    }
+
+    // since this occured between instances, some database changes might not have been applied
+    // so we need to run the migrations again to ensure that the database is up to date
+    console.info('[SYNC] Running database migrations...')
+    syncLog += "\n[SYNC] Running database migrations...\n";
+
+    const migrateResult = await runDatabaseMigrations(target);
     syncLog += migrateResult.log;
-
     if (migrateResult.error) {
-      writeLog(syncLog, false, "sync");
-      return;
+        return { error: true, log: syncLog };
     }
 
-    console.log('[SYNC] Rebuilding foreign keys...')
-    syncLog += "\n--- REBUILDING FOREIGN KEYS ---\n";
-    const rebuildForeignKeysResult = await rebuildForeignKeys(toDeployment);
-    syncLog += rebuildForeignKeysResult.log;
-
-    if (rebuildForeignKeysResult.error) {
-      writeLog(syncLog, false, "sync");
-      return;
+    const maintenanceDisableResult = await setMaintenanceMode(target, false);
+    syncLog += maintenanceDisableResult.log;
+    if (maintenanceDisableResult.error) {
+        return { error: true, log: syncLog };
     }
 
-    // Anonymise the database
-    console.log('[SYNC] Anonymising database...')
-    syncLog += "\n--- ANONYMISING DATABASE ---\n";
-    const [anonymiseFailed, anonymiseLog] = await anonymiseDatabase(toDeployment);
-    console.log("[SYNC] Anonymisation complete: ", anonymiseFailed ? "FAIL" : "SUCCESS");
-    syncLog += anonymiseLog;
-    syncLog += `\n\n--- ANONYMISING DATABASE: ${anonymiseFailed ? "FAIL" : "SUCCESS"} --- \n\n`;
-
-    if (anonymiseFailed) {
-      writeLog(syncLog, false, "sync");
-      console.error("[SYNC] Anonymisation failed");
-      return;
-    }
-
-    // Rebuild the views
-    console.log('[SYNC] Rebuilding views...')
-    syncLog += "\n--- REBUILDING VIEWS ---\n";
-    const rebuildViewsResult = await rebuildViews(toDeployment);
-    console.log("[SYNC] View rebuild complete: ", rebuildViewsResult.error ? "FAIL" : "SUCCESS");
-    syncLog += rebuildViewsResult.log;
-
-    if (rebuildViewsResult.error) {
-      writeLog(syncLog, false, "sync");
-      return;
-    }
-
+    console.info("[SYNC] Sync complete")
     syncLog += `\n[SYNC] Finished on ${new Date().toISOString()}\n\n`
-    writeLog(syncLog, true, "sync");
-    console.log("[SYNC] Sync complete")
-    setMaintenanceMode(toDeployment, false);
+
+    return { error: false, log: syncLog };
 }

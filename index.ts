@@ -9,16 +9,15 @@ import crypto from 'crypto';
 import fs from 'fs';
 import { spawn } from 'child_process';
 import { CronJob } from "cron";
-import { config } from "./config"
-import { runSyncDatabases } from './functions/syncDatabases';
-import { runDatabaseMigrations } from './functions/migrate';
-import { setMaintenanceMode, start } from './functions/docker';
-import { writeLog } from './functions/logging';
 import { createDatabaseBackup, getDeploymentBackupDir } from "./functions/backup";
 import type { ApiBackupResult } from "./functions/backup";
-import { rebuildViews } from "./functions/docker";
+import { setMaintenanceMode, start, stop } from './functions/docker';
 import { getAllDeployments, getDeployment } from "./functions/deployment";
 import type { Deployment } from "./functions/deployment";
+import { writeLog } from './functions/logging';
+import { runDatabaseMigrations } from './functions/migrate';
+import { syncDatabases } from './functions/syncDatabases';
+import { config } from "./config"
 
 const app = express();
 app.set('trust proxy', true);
@@ -169,7 +168,13 @@ app.post('/deploy', async (req, res) => {
   console.log(`[DEPLOYER] Deploying ${req.body.repository.full_name} (${req.body.ref}) to ${deployment.title}...`);
   let deployLog = `--- Deploying ${req.body.repository.full_name} (${req.body.ref}) to ${deployment.title} ---\n`;
 
-  setMaintenanceMode(deployment, true);
+  const maintenanceEnableResult = await setMaintenanceMode(deployment, true);
+  deployLog += maintenanceEnableResult.log;
+  if (maintenanceEnableResult.error) {
+    writeLog(deployLog, false, "deploy");
+    return res.status(500).send('Error enabling maintenance mode');
+  }
+
   deployLog += `Deployment started on ${new Date().toISOString()}\n\n`;
   // Execute the shell script to pull the latest changes from the branch
   exec(`cd ${deployment.path} && ${deployment.pull_cmd}`, async (err, stdout, stderr) => {
@@ -186,6 +191,13 @@ app.post('/deploy', async (req, res) => {
     // Build & start the instance
     console.log('[DEPLOY] Rebuilding instance...');
     deployLog += '\n[DEPLOY] Rebuilding instance...';
+    const stopResult = await stop(deployment);
+    deployLog += stopResult.log;
+    if (stopResult.error) {
+      writeLog(deployLog, false, "deploy");
+      return res.status(500).send('Error stopping instance');
+    }
+
     const initialStartResult = await start(deployment, true);
     deployLog += initialStartResult.log;
     if (initialStartResult.error) {
@@ -203,19 +215,15 @@ app.post('/deploy', async (req, res) => {
       return res.status(500).send('Error executing database migrations');
     }
 
-    // Rebuild the views
-    console.log('[SYNC] Rebuilding views...')
-    deployLog += "\n--- REBUILDING VIEWS ---\n";
-    const rebuildViewsResult = await rebuildViews(deployment);
-    deployLog += rebuildViewsResult.log;
-    if (rebuildViewsResult.error) {
-      writeLog(deployLog, false, "sync");
-      return res.status(500).send('Error rebuilding views');
+    const maintenanceDisableResult = await setMaintenanceMode(deployment, false);
+    deployLog += maintenanceDisableResult.log;
+    if (maintenanceDisableResult.error) {
+      writeLog(deployLog, false, "deploy");
+      return res.status(500).send('Error disabling maintenance mode');
     }
 
     writeLog(deployLog, true, "deploy");
     res.status(200).send('OK');
-    setMaintenanceMode(deployment, false);
   });
 });
 
@@ -369,10 +377,12 @@ app.listen(config.HTTP_PORT, () => {
   console.log(`Deployer server listening on port ${config.HTTP_PORT}`);
 });
 
-function triggerSyncDatabases() {
+async function triggerSyncDatabases() {
   const fromDeployment = getDeployment(config.SYNC_FROM_DEPLOYMENT, true);
   const toDeployment = getDeployment(config.SYNC_TO_DEPLOYMENT, true);
-  runSyncDatabases(fromDeployment, toDeployment);
+
+  const result = await syncDatabases(fromDeployment, toDeployment);
+  writeLog(result.log, !result.error, "sync");
 }
 
 async function runPHPScript(filePath: string, cwd: string): Promise<string> {
