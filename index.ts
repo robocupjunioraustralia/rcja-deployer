@@ -11,7 +11,7 @@ import { spawn } from 'child_process';
 import { CronJob } from "cron";
 import { createDatabaseBackup, getDeploymentBackupDir } from "./functions/backup";
 import type { ApiBackupResult } from "./functions/backup";
-import { setMaintenanceMode, start, stop } from './functions/docker';
+import { runNightly, setMaintenanceMode, start, stop } from './functions/docker';
 import { getAllDeployments, getDeployment } from "./functions/deployment";
 import type { Deployment } from "./functions/deployment";
 import { writeLog } from './functions/logging';
@@ -385,34 +385,6 @@ async function triggerSyncDatabases() {
   writeLog(result.log, !result.error, "sync");
 }
 
-async function runPHPScript(filePath: string, cwd: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const migrateCmd = spawn(config.PHP_PATH, [filePath], { cwd: cwd, shell: true });
-
-    let scriptLog = "";
-    migrateCmd.on('exit', (code) => {
-      if (code === 0) {
-        return resolve(scriptLog);
-      }
-      reject(`PHP script exited with code ${code}:\n${scriptLog}`)
-    });
-
-    migrateCmd.on('error', (err) => {
-      reject(`PHP script errored:\n${err?.message || err}\n${scriptLog}`);
-    });
-
-    migrateCmd.stdout.on('data', (data) => {
-      console.log(data.toString());
-      scriptLog += data;
-    });
-
-    migrateCmd.stderr.on('data', (data) => {
-      console.log(data.toString());
-      scriptLog += data;
-    });
-  });
-}
-
 async function triggerCMSNightly() {
   const deployments = getAllDeployments();
 
@@ -428,28 +400,11 @@ async function triggerCMSNightly() {
       continue;
     }
 
-    // Find and run the nightly script, if present, under path/utils/nightly.php
-    const nightlyScript = path.join(deployment.path, 'utils/nightly.php');
-    if (fs.existsSync(nightlyScript)) {
-      console.log('[NIGHTLY] Running script...');
-      nightlyLog += `[NIGHTLY] Running script...\n`;
-
-      try {
-        const scriptOutput = await runPHPScript(nightlyScript, deployment.path)
-        nightlyLog += scriptOutput;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error('[NIGHTLY] Error running script:', message);
-        nightlyLog += `[NIGHTLY] Error running script: ${message}\n`;
-
-        writeLog(nightlyLog, false, "nightly");
-        return;
-      }
-
-      console.log('[NIGHTLY] Script complete.');
-      nightlyLog += `[NIGHTLY] Script complete.\n\n`;
-    } else {
-      nightlyLog += `[NIGHTLY] Skipping Deployment - No script found.\n\n`;
+    const result = await runNightly(deployment);
+    if (result.error) {
+      nightlyLog += `[NIGHTLY] Error running nightly script:\n\n`;
+      console.error(result.error.message);
+      continue;
     }
   }
 
