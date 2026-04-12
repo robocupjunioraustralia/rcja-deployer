@@ -1,10 +1,14 @@
-# RCJCMS Deployer
+# RCJA Deployer
 
-This is a tool used for managing deployments of the RCJCMS (https://github.com/robocupjunior/rcj_cms)
+This is a tool used for managing deployments of the RCJ CMS ([robocupjunioraustralia/rcj_cms](https://github.com/robocupjunioraustralia/rcj_cms))
+
+> [!IMPORTANT]
+> This version of the deployer is compatible with versions `v24.4.0` to `v25.4.2` of the CMS. \
+> Use this version to upgrade an instance to `v25.4.2`, then proceed to the latest deployer for `v26.1.0` +
 
 ## Required Software
 
-The following software is required for the various functions of this tool to work, they essentially match the RCJCMS requirements.\
+The following software is required for the various functions of this tool to work, they essentially match the RCJ CMS requirements.\
 *Listed versions are the minimum required version, later versions may also work.*
 - NodeJS (https://nodejs.org/en/download) `20.x.x LTS`
 - PHP (https://www.php.net/downloads) `8.2`
@@ -15,7 +19,7 @@ The following software is required for the various functions of this tool to wor
 ## Installation
 
 1. Install the required software
-1. Clone the repository: `git clone https://github.com/robocupjunioraustralia/rcja-deployer.git`
+1. Clone the repository: `git clone git@github.com:robocupjunioraustralia/rcja-deployer.git`
 1. Change to the location you cloned the above repo `cd rcja-deployer`
 1. Install dependencies, by running the following command in CMD/Terminal etc.: `npm install`
 
@@ -29,7 +33,7 @@ The following software is required for the various functions of this tool to wor
 The following variables must be set for the deployment scripts to work.
 | Variable | Description |
 | --- | --- |
-| DB_HOST<br>DB_USER<br>DB_PASSWORD | Details for the MariaDB server with a working instance of the RCJCMS |
+| DB_HOST<br>DB_USER<br>DB_PASSWORD | Details for the MariaDB server with a working instance of the RCJ CMS |
 | DB_CACHE_NAME | Required for the anonymise function.<br>The name of the MySQL database to use for caching names.<br>If you wish to use this, create an empty database using the specificed name, and populate it using the schema in db.sql. |
 | | |
 | NPM_PATH<br>PHP_PATH<br>MYSQL_PATH<br>MYSQLDUMP_PATH<br>COMPOSER_PATH | The paths to your npm, php, mysql, mysqldump, and composer executables.<br>There are some suggestions in the sample file for windows/linux |
@@ -54,7 +58,7 @@ The sample included is meant for a full deployment, for a development instance o
 ```json
 {
     "develop" : {
-        "title": "RCJCMS - Development",
+        "title": "RCJ CMS - Development",
         "path": "C:/xampp/htdocs/rcj_cms/",
         "migration_folder": "updates",
         "database_prefix": "rcj_cms",
