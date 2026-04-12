@@ -17,8 +17,8 @@
   },
   "license": "ISC",
   "dependencies": {
-    "@sentry/node": "^7.107.0",
-    "@sentry/profiling-node": "^7.107.0",
+    "@sentry/node": "^10.48.0",
+    "@sentry/profiling-node": "^10.48.0",
     "body-parser": "^1.20.2",
     "chalk": "^4.1.2",
     "cron": "^2.3.0",

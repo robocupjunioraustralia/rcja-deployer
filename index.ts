@@ -1,5 +1,5 @@
-import Sentry from "@sentry/node";
-import { nodeProfilingIntegration } from "@sentry/profiling-node";
+import "./instrument"; // sentry
+import * as Sentry from "@sentry/node";
 import bodyParser from "body-parser";
 import { exec } from 'child_process';
 import { CronJob } from "cron";
@@ -21,22 +21,6 @@ import { config } from "./config"
 const app = express();
 app.set('trust proxy', true);
 app.set('case sensitive routing', false);
-
-if (config.SENTRY_DSN) {
-  Sentry.init({
-    dsn: config.SENTRY_DSN,
-    integrations: [
-      new Sentry.Integrations.Http({ tracing: true }),
-      new Sentry.Integrations.Express({ app }),
-      nodeProfilingIntegration(),
-    ],
-    tracesSampleRate: 1.0,
-    profilesSampleRate: 1.0,
-  });
-
-  app.use(Sentry.Handlers.requestHandler());
-  app.use(Sentry.Handlers.tracingHandler());
-}
 
 app.use(bodyParser.json());
 app.use(express.json({limit: '50mb'}));
@@ -316,14 +300,6 @@ app.get('/export/:deployment_id/:backup_name', canExport, async (req: BackupRequ
   writeLog(exportLog, true, "export");
 });
 
-if (config.SENTRY_DSN) {
-  app.use(Sentry.Handlers.errorHandler());
-}
-
-app.listen(config.HTTP_PORT, () => {
-  console.log(`Deployer server listening on port ${config.HTTP_PORT}`);
-});
-
 async function triggerSyncDatabases() {
   const fromDeployment = getDeployment(config.SYNC_FROM_DEPLOYMENT, true);
   const toDeployment = getDeployment(config.SYNC_TO_DEPLOYMENT, true);
@@ -374,3 +350,11 @@ nightlyJob.start();
 
 // Run the nightly script on startup
 triggerCMSNightly();
+
+if (config.SENTRY_DSN) {
+  Sentry.setupExpressErrorHandler(app);
+}
+
+app.listen(config.HTTP_PORT, () => {
+  console.log(`Deployer server listening on port ${config.HTTP_PORT}`);
+});
