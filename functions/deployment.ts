@@ -30,8 +30,6 @@ export type Deployment = {
     pull_cmd: string;
     /** whether or not to backup the database before running migrations when triggered by a webhook */
     backup?: boolean;
-    /** whether or not to run the nightly script for this deployment */
-    run_nightly?: boolean;
     /** allow this instance to be exported via /export/{deploymentKey} */
     export?: {
         /** An array of allowed IPs that can trigger the export */

@@ -127,17 +127,3 @@ export function importBackup(deployment: Deployment, readStream: NodeJS.Readable
         pipeInput: readStream
     });
 }
-
-/**
- * Run the nightly script for an RCJ CMS instance
- *
- * @param deployment target
- */
-export function runNightly(deployment: Deployment): Promise<DeploymentExecResult> {
-    return deploymentExec({
-        deployment,
-        command: 'docker',
-        args: ['compose', 'exec', '-T', SERVICE_APP, 'php', 'utils/nightly.php'],
-        successMessage: `[DOCKER] Nightly script complete`
-    });
-}

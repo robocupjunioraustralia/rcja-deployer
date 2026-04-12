@@ -8,7 +8,6 @@ This is a tool used for managing deployments of the RCJ CMS ([robocupjunioraustr
 
 The deployer is responsible for:
 - Handling RCJ CMS release deployments triggered by a webhook from GitHub
-- Running nightly jobs on deployments where enabled
 - Syncing databases between deployments nightly (e.g. for production to staging refreshes)
 
 As a development tool, it also provides some CLI scripts to manage deployments: (see [CLI Scripts](#cli-scripts) for details)
@@ -78,7 +77,6 @@ Required fields:
 
 Optional fields:
 - `backup`: Whether or not to backup the database before running migrations when triggered by a webhook
-- `run_nightly`: Whether or not to run the nightly script for this deployment
 - `export`: To allow this instance to be exported via /export/{deploymentKey}
   - `allowed_ips`: An array of allowed IPs that can trigger the export
   - `secret`: A bearer token required to trigger exports via the API
@@ -95,13 +93,9 @@ Start the deployment listener / scheduled jobs runner:
 npm start
 ```
 
-The server listens on `HTTP_PORT` and starts three scheduled jobs:
-
-- nightly script runs at 00:00
+The server listens on `HTTP_PORT` and starts two scheduled jobs:
 - export cleanup runs at 01:00
 - database sync runs at 02:00
-
-The nightly script also runs once on startup
 
 ## CLI Scripts
 

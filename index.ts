@@ -10,7 +10,7 @@ import morgan from "morgan";
 import path from "path";
 import { createDatabaseBackup, getDeploymentBackupDir } from "./functions/backup";
 import type { ApiBackupResult } from "./functions/backup";
-import { runNightly, setMaintenanceMode, start, stop } from './functions/docker';
+import { setMaintenanceMode, start, stop } from './functions/docker';
 import { getAllDeployments, getDeployment } from "./functions/deployment";
 import type { Deployment } from "./functions/deployment";
 import { writeLog } from './functions/logging';
@@ -308,48 +308,13 @@ async function triggerSyncDatabases() {
   writeLog(result.log, !result.error, "sync");
 }
 
-async function triggerCMSNightly() {
-  const deployments = getAllDeployments();
-
-  const nightlyStart = new Date();
-  let nightlyLog = `--- Running nightly scripts on ${deployments.length} deployments ---\n`;
-  nightlyLog += `[NIGHTLY] Started on ${nightlyStart.toISOString()}\n`;
-
-  for (const deployment of Object.values(deployments)) {
-    nightlyLog += `--- Deployment: ${deployment.title} ---\n`;
-
-    if (!deployment.run_nightly) {
-      nightlyLog += `[NIGHTLY] Skipping Deployment - Not enabled.\n\n`;
-      continue;
-    }
-
-    const result = await runNightly(deployment);
-    if (result.error) {
-      nightlyLog += `[NIGHTLY] Error running nightly script:\n\n`;
-      console.error(result.error.message);
-      continue;
-    }
-  }
-
-  const timeTaken = (new Date().getTime() - nightlyStart.getTime()) / 1000;
-  console.log(`[NIGHTLY] Nightly scripts complete. Took ${timeTaken} seconds.`);
-  nightlyLog += `[NIGHTLY] Nightly scripts complete. Took ${timeTaken} seconds.\n`;
-  writeLog(nightlyLog, true, "nightly");
-}
-
 // Schedule jobs:
-// - triggerCMSNightly - every night at 12am
 // - cleanupExports - every night at 1am
 // - triggerSyncDatabases - every night at 2am
 const syncJob = new CronJob('0 0 2 * * *', triggerSyncDatabases);
 const cleanupJob = new CronJob('0 0 1 * * *', cleanupExports);
-const nightlyJob = new CronJob('0 0 0 * * *', triggerCMSNightly);
 syncJob.start();
 cleanupJob.start();
-nightlyJob.start();
-
-// Run the nightly script on startup
-triggerCMSNightly();
 
 if (config.SENTRY_DSN) {
   Sentry.setupExpressErrorHandler(app);

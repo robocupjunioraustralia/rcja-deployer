@@ -3,7 +3,7 @@ import fs from 'fs';
 import nodemailer from 'nodemailer';
 import { config } from '../config';
 
-export function writeLog(message: string, success: boolean, type: 'deploy' | 'sync' | 'nightly' | 'import' | 'export') {
+export function writeLog(message: string, success: boolean, type: 'deploy' | 'sync' | 'import' | 'export') {
     const logDir = path.join(__dirname, '../logs');
     if (!fs.existsSync(logDir)) {
         fs.mkdirSync(logDir);
@@ -18,8 +18,6 @@ export function writeLog(message: string, success: boolean, type: 'deploy' | 'sy
                 console.log(`${success ? 'Deployment successful' : 'Error while deploying'}. See logs/${logName} for details.`);
             } else if (type == 'sync') {
                 console.log(`${success ? 'Sync successful' : 'Error while syncing'}. See logs/${logName} for details.`);
-            } else if (type == 'nightly') {
-                console.log(`${success ? 'Nightly script successful' : 'Error while running nightly script'}. See logs/${logName} for details.`);
             } else if (type == 'import') {
                 console.log(`${success ? 'Import successful' : 'Error while importing'}. See logs/${logName} for details.`);
             } else if (type == 'export') {
@@ -31,8 +29,6 @@ export function writeLog(message: string, success: boolean, type: 'deploy' | 'sy
         sendEmail(success ? 'Deployment successful' : 'DEPLOYMENT FAILED', message, logFile);
     } else if (type == 'sync') {
         sendEmail(success ? 'Sync successful' : 'SYNC FAILED', message, logFile);
-    } else if (type == 'nightly') {
-        sendEmail(success ? 'Nightly script successful' : 'NIGHTLY SCRIPT FAILED', message, logFile);
     } else if (type == 'import') {
         sendEmail(success ? 'Import successful' : 'IMPORT FAILED', message, logFile);
     } else if (type == 'export') {
