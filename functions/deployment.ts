@@ -17,23 +17,25 @@ export type DeploymentExecResult = {
 
 export type Deployment = {
     key: string;
-    /** name of the deployment */
+    /** human-readable name of the deployment */
     title: string;
-    /** local path to the deployment files (where docker-compose.yml is located) */
+    /** local path to the deployment files (where `docker-compose.yml` is located) */
     path: string;
-    /** git repository for the deployment */
+    /** For incoming webhook events, git repository filter for the deployment */
     repository: string;
-    /** the command to use to pull the latest changes */
+    /** For incoming webhook events, git branch ref filter for the deployment */
+    branch_ref: string;
+    /** For incoming webhook events, the shell command to use to pull the latest changes */
     pull_cmd: string;
-    /** the git ref for confirming the branch sent from the webhook */
-    branch_ref?: string;
-    /** whether or not to backup the database before running migrations */
+    /** whether or not to backup the database before running migrations when triggered by a webhook */
     backup?: boolean;
     /** whether or not to run the nightly script for this deployment */
     run_nightly?: boolean;
-    /** allow this instance to be exported via /export/[deploymentKey] */
+    /** allow this instance to be exported via /export/{deploymentKey} */
     export?: {
+        /** An array of allowed IPs that can trigger the export */
         allowed_ips: string[];
+        /** A bearer token required to trigger exports via the API */
         secret: string;
     };
     /** the remote instance details to use when using the import tool */

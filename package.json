@@ -1,7 +1,8 @@
 {
   "name": "rcja-deployer",
-  "version": "1.0.0",
-  "description": "",
+  "version": "26.1.0",
+  "author": "RoboCup Junior Australia",
+  "description": "A deployment tool for managing RCJ CMS instances",
   "main": "index.ts",
   "scripts": {
     "start": "ts-node -T index.ts",
@@ -10,7 +11,10 @@
     "sync": "ts-node -T tools/sync.ts",
     "update": "ts-node -T tools/update.ts"
   },
-  "author": "",
+  "repository": {
+      "type": "git",
+      "url": "git://github.com/robocupjunioraustralia/rcja-deployer.git"
+  },
   "license": "ISC",
   "dependencies": {
     "@sentry/node": "^7.107.0",

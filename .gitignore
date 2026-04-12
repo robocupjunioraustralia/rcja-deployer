@@ -1,5 +1,9 @@
 logs/*
 backups/*
 .env
+.env.*
+!.env.sample
 deployments.json
+deployments.json.*
+!deployments.sample.json
 node_modules
