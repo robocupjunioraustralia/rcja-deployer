@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import { spawn } from 'child_process';
 import { readFileSync } from 'fs';
 import path from 'path';
@@ -132,7 +133,7 @@ export function deploymentExec(options: {
             const text = chunk.toString();
             result.stderr += text;
             result.log += text;
-            process.stderr.write(text);
+            process.stderr.write(chalk.red(text));
         });
 
         child.on('error', (err) => {

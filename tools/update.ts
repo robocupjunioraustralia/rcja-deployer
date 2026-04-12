@@ -40,8 +40,10 @@ async function main() {
     // migrate
     const result = await runDatabaseMigrations(deployment);
     if (result.error) {
-        throw result.error;
+        return;
     }
+
+    console.info(chalk.green(`Done!`));
 }
 
 main();

@@ -30,7 +30,10 @@ async function main() {
         return;
     }
 
-    await syncDatabases(source, target);
+    const result = await syncDatabases(source, target);
+    if (result.error) {
+        return;
+    }
 
     console.info(chalk.green(`Done!`));
 }

@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { deploymentHasUncommittedChanges, getCurrentBranch, checkoutDeploymentTo } from './deployment';
 import type { Deployment } from './deployment';
 import { runMigrate, start, stop } from './docker';
@@ -10,8 +11,19 @@ import { runMigrate, start, stop } from './docker';
 export async function runDatabaseMigrations(deployment: Deployment): Promise<{ error: boolean; log: string }> {
     let migrationLog = '';
 
-    // TODO: backup DB
-    // TODO: check for version too old to migrate? (this version of the deployer NEEDS docker)
+    /**
+     * this version of the deployer is only compatible with instances running with docker compose (26.1.0 and newer)
+     * in case someone tries to run it on an older instance, suggest that they go back to a compatible deployer release
+     */
+    if (!existsSync(deployment.path + '/docker-compose.yml')) {
+        const failMessage = `\n[MIGRATE] Unable to proceed: Incompatible release detected`
+            + "\n  - This version of the deployer requires the target deployment to be running v26.1.0 or newer"
+            + "\n  - To migrate an instance running v24.4.0 to v25.4.2, use https://github.com/robocupjunioraustralia/rcja-deployer/releases/tag/25.4.2";
+
+        console.error(failMessage);
+        migrationLog += `\n${failMessage}`;
+        return { error: true, log: migrationLog };
+    }
 
     // Run the migrations
     const initialMigrateResult = await runMigrate(deployment);
@@ -39,9 +51,9 @@ export async function runDatabaseMigrations(deployment: Deployment): Promise<{ e
      */
     if (await deploymentHasUncommittedChanges(deployment)) {
         const failMessage = `\n[MIGRATE] Unable to proceed: Uncommitted changes in deployment directory and migrations outside current release`
-            + `\n   - You are currently on: ${releaseInfo.currentRelease}`
-            + `\n   - New migrations found for: ${releaseInfo.targetReleases.join(', ')}`
-            + `\n   To avoid data loss, please commit or stash your changes before proceeding`;
+            + `\n  - You are currently on: ${releaseInfo.currentRelease}`
+            + `\n  - New migrations found for: ${releaseInfo.targetReleases.join(', ')}`
+            + `\n  - To avoid data loss, please commit or stash your changes before proceeding`;
 
         console.error(failMessage);
         migrationLog += `\n${failMessage}`;
