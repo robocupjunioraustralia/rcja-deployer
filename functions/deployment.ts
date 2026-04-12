@@ -1,6 +1,6 @@
-import path from 'path';
-import { existsSync, readFileSync } from 'fs';
 import { spawn } from 'child_process';
+import { readFileSync } from 'fs';
+import path from 'path';
 
 class DeploymentExecError extends Error {
     constructor(message: string, public result: DeploymentExecResult) {
@@ -19,7 +19,7 @@ export type Deployment = {
     key: string;
     /** name of the deployment */
     title: string;
-    /** local path to the deployment files (where docker-compose.yml/package.json is located) */
+    /** local path to the deployment files (where docker-compose.yml is located) */
     path: string;
     /** git repository for the deployment */
     repository: string;
@@ -165,42 +165,6 @@ export function deploymentExec(options: {
             resolve(result);
         });
     });
-}
-
-/**
- * Get the version of an RCJ CMS instance
- * Note: for legacy support (versions prior to 26.1.0 without docker),
- * this retrieves the version from the package.json OUTSIDE of the container
- *
- * The version is currently stored in the "version" field of the package.json file
- * If the package.json file doesn't exist, or the version field is missing,
- * then the version is older than 23.8.0 (the first version to include the version field)
- * @param deployment target
- * @returns The version of the deployment, or null if unknown (< 23.8.0)
- */
-export function getDeploymentVersion(deployment: Deployment): string | null {
-    const packageJsonPath = path.join(deployment.path, 'package.json');
-    if (!existsSync(packageJsonPath)) {
-        return null;
-    }
-
-    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
-    return packageJson.version ?? null;
-}
-
-/**
- * Find the list of git tags that are available for the deployment
- * This represents the list of releases that can be switched to when running migrations
- * @param deployment target
- * @returns The list of git tags available for the deployment
- */
-export async function getDeploymentTags(deployment: Deployment): Promise<string[]> {
-    const result = await deploymentExec({
-        deployment,
-        command: 'git',
-        args: ['tag']
-    });
-    return result.stdout.split('\n').filter((tag) => tag !== '');
 }
 
 /**
