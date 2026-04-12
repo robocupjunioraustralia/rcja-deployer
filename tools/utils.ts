@@ -7,16 +7,7 @@ import type { Deployment } from '../functions/deployment';
  * @returns the deployment from the command line args, or the first deployment if no args provided
  */
 export function getDeploymentFromArgs(): Deployment {
-    const scriptIndex = process.argv.findIndex((arg) => arg.endsWith('scripts.ts'));
-    if (scriptIndex === -1) {
-        return getDeployment(undefined, true); // first deployment is the default
-    }
-
-    const deploymentKey = process.argv[scriptIndex + 2] ?? null;
-    if (!deploymentKey) {
-        return getDeployment(undefined, true); // first deployment is the default
-    }
-
+    const deploymentKey = process.argv.slice(2).find((arg) => !arg.startsWith('-')) ?? undefined;
     return getDeployment(deploymentKey, true);
 }
 
