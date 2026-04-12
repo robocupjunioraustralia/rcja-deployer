@@ -1,7 +1,7 @@
 import Sentry from "@sentry/node";
 import { nodeProfilingIntegration } from "@sentry/profiling-node";
 import bodyParser from "body-parser";
-import { spawn, exec } from 'child_process';
+import { exec } from 'child_process';
 import { CronJob } from "cron";
 import crypto from 'crypto';
 import express from "express";
@@ -58,72 +58,6 @@ app.use(morgan(':statusColor :method :url - :response-time ms - :req[x-Forwarded
 
 app.get("/deploy/ping", (req, res) => {
   res.send("OK");
-});
-
-// GitHub actions endpoint for deployments of robocupjunior/RCJA_Registration_System
-// Action has two secrets:
-// - DEPLOY_TOKEN: Matches config.REGO_DEPLOY_SECRET for authentication
-// - DEPLOY_URL: POST https://rcja.app/deploy/rego
-// Expects a JSON payload with:
-// - image: the SHA of the deployment
-// - environment: the environment to deploy to "prod" or "staging"
-app.post('/deploy/rego', async (req, res) => {
-  console.log(req.body);
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.split(" ")[1] !== config.REGO_DEPLOY_SECRET) {
-    return res.status(401).send('Unauthorized');
-  }
-
-  if (!req.body.image || !/^[a-f0-9]{40}$/i.test(req.body.image)) {
-    return res.status(400).send('Invalid or missing DEPLOY_SHA');
-  }
-
-  if (!req.body.environment || !["prod", "staging"].includes(req.body.environment)) {
-    return res.status(400).send('Invalid or missing DEPLOY_ENV');
-  }
-
-  const targetEnv = req.body.environment === "prod" ? "production" : "staging";
-
-  console.log(`[REGO] Received deployment request for ${req.body.image}...`)
-
-  res.setHeader('Content-Type', 'text/plain');
-
-  // Run config.REGO_DEPLOY_SCRIPT with a param of the sha. Pipe the output to the response.
-  try {
-    const deployCmd = spawn("sudo", [config.REGO_DEPLOY_SCRIPT, req.body.image, targetEnv], {
-      shell: true,
-      cwd: config.REGO_DEPLOY_PATH
-    });
-
-    deployCmd.stdout.on('data', (data) => {
-      console.log("[REGO] " + data.toString())
-      res.write(data);
-    });
-
-    deployCmd.stderr.on('data', (data) => {
-      console.log("[REGO] " + data.toString())
-      res.write(data);
-    });
-
-    deployCmd.on('close', (code) => {
-      console.log(`[REGO] Process exited with code ${code}`);
-
-      if (code !== 0) {
-        res.write(`Process exited with code ${code}`);
-        res.status(500).end();
-        return;
-      } else {
-        // Expects last line of script to be "Deployment complete." if successful
-        res.write('Deployment complete.');
-        res.end();
-      }
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[REGO] Error running deployment script:", message);
-    res.write(`Error running deployment script: ${message}`);
-    res.status(500).end();
-  }
 });
 
 // GitHub webhook endpoint after any push requests are made to robocupjunior/rcj_cms

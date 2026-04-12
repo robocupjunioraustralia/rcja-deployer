@@ -62,12 +62,6 @@ Optional fields:
 - `SMTP_*`: SMTP configuration to send job logs / error reports via email
 - `SENTRY_DSN`: To enable error reporting to Sentry
 
-The deployer is also currently responsible for handling deployment triggers from the RCJA registration system, this requires additional configuration variables:
-
-- `REGO_DEPLOY_SCRIPT`: Path to the rego deploy script
-- `REGO_DEPLOY_PATH`: Working directory for the registration deploy script.
-- `REGO_DEPLOY_SECRET`: Bearer token used by `/deploy/rego`.
-
 ### Deployment Configuration
 
 The configuration from `deployments.json` is read using `functions/deployment.ts`.

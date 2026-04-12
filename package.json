@@ -12,8 +12,8 @@
     "update": "ts-node -T tools/update.ts"
   },
   "repository": {
-      "type": "git",
-      "url": "git://github.com/robocupjunioraustralia/rcja-deployer.git"
+    "type": "git",
+    "url": "git://github.com/robocupjunioraustralia/rcja-deployer.git"
   },
   "license": "ISC",
   "dependencies": {
@@ -25,7 +25,6 @@
     "crypto": "^1.0.1",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
-    "express-github-webhook": "^1.0.6",
     "inquirer": "^13.3.2",
     "morgan": "^1.10.0",
     "nodemailer": "^8.0.4",
