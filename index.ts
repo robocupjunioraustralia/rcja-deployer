@@ -355,6 +355,10 @@ if (config.SENTRY_DSN) {
   Sentry.setupExpressErrorHandler(app);
 }
 
-app.listen(config.HTTP_PORT, () => {
+app.listen(config.HTTP_PORT, (error) => {
+  if (error) {
+    throw error;
+  }
+
   console.log(`Deployer server listening on port ${config.HTTP_PORT}`);
 });

@@ -1,6 +1,6 @@
 {
     "master" : {
-        "title": "RCJCMS - Production",
+        "title": "RCJ CMS - Production",
         "path": "/path/to/production/rcj_cms/",
         "repository": "robocupjunioraustralia/rcj_cms",
         "branch_ref": "refs/heads/master",
@@ -13,7 +13,7 @@
         }
     },
     "staging" : {
-        "title": "RCJCMS - Staging",
+        "title": "RCJ CMS - Staging",
         "path": "/path/to/staging/rcj_cms/",
         "repository": "robocupjunioraustralia/rcj_cms",
         "branch_ref": "refs/heads/develop",

@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-const { parsed } = dotenv.config();
+const { parsed } = dotenv.config({ quiet: true });
 
 type Env = {
     /** Port for the web server to listen on */
