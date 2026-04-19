@@ -261,7 +261,7 @@ app.get('/export/:deployment_id/:backup_name', canExport, async (req: BackupRequ
     backupName = existingBackups.sort().reverse()[0];
   }
 
-  const backupFile = path.join(deploymentBackupDir, backupName);
+  const backupFile = path.join(deploymentBackupDir, `${backupName}.tar.gz`);
 
   // prevent path traversal
   if (!backupFile.startsWith(deploymentBackupDir)) {
