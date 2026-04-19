@@ -185,9 +185,9 @@ async function canExport(
 }
 
 function cleanupExports() {
-  const deployments_info = JSON.parse(fs.readFileSync(path.join(__dirname, 'deployments.json'), 'utf8'));
-  for (const deploymentKey in deployments_info) {
-    const deploymentBackupDir = getDeploymentBackupDir(deployments_info[deploymentKey], false);
+  const deployments = getAllDeployments();
+  for (const deployment of Object.values(deployments)) {
+    const deploymentBackupDir = getDeploymentBackupDir(deployment, false);
     if (!deploymentBackupDir) {
       continue;
     }
