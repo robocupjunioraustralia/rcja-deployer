@@ -1,0 +1,23 @@
+{
+    "compilerOptions": {
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "moduleResolution": "nodenext",
+        "module": "nodenext",
+        "outDir": "dist",
+        "rootDir": "./",
+        "skipLibCheck": true,
+        "strict": true,
+        "target": "ES2021",
+        "lib": ["ES2021"],
+        "sourceMap": true,
+        "allowJs": true,
+        "types": ["node"]
+    },
+    "exclude": [
+        ".git",
+        "node_modules",
+        "dist"
+    ],
+    "include": [ "**/*.ts" ]
+}

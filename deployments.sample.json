@@ -1,0 +1,27 @@
+{
+    "master" : {
+        "title": "RCJ CMS - Production",
+        "path": "/path/to/production/rcj_cms/",
+        "repository": "robocupjunioraustralia/rcj_cms",
+        "branch_ref": "refs/heads/master",
+        "pull_cmd": "git fetch --all && git status && git reset --hard origin/master && git pull origin master && git status",
+        "backup": true,
+        "export": {
+            "allowed_ips": ["127.0.0.1"],
+            "secret": "XXXXXXXXXXXXXXXXXXXXXXX"
+        }
+    },
+    "staging" : {
+        "title": "RCJ CMS - Staging",
+        "path": "/path/to/staging/rcj_cms/",
+        "repository": "robocupjunioraustralia/rcj_cms",
+        "branch_ref": "refs/heads/develop",
+        "pull_cmd": "git fetch --all && git status && git reset --hard origin/develop && git pull origin develop && git status",
+        "backup": false,
+        "import": {
+            "remote_host": "https://localhost:3003",
+            "deployment": "master",
+            "secret": "XXXXXXXXXXXXXXXXXXXXXXX"
+        }
+    }
+}

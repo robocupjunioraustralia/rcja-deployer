@@ -1,0 +1,219 @@
+import chalk from 'chalk';
+import { spawn } from 'child_process';
+import { readFileSync } from 'fs';
+import path from 'path';
+
+class DeploymentExecError extends Error {
+    constructor(message: string, public result: DeploymentExecResult) {
+        super(message);
+    }
+}
+
+export type DeploymentExecResult = {
+    stdout: string;
+    stderr: string;
+    log: string;
+    error: DeploymentExecError | null;
+}
+
+export type Deployment = {
+    key: string;
+    /** human-readable name of the deployment */
+    title: string;
+    /** local path to the deployment files (where `docker-compose.yml` is located) */
+    path: string;
+    /** For incoming webhook events, git repository filter for the deployment */
+    repository: string;
+    /** For incoming webhook events, git branch ref filter for the deployment */
+    branch_ref: string;
+    /** For incoming webhook events, the shell command to use to pull the latest changes */
+    pull_cmd: string;
+    /** whether or not to backup the database before running migrations when triggered by a webhook */
+    backup?: boolean;
+    /** allow this instance to be exported via /export/{deploymentKey} */
+    export?: {
+        /** An array of allowed IPs that can trigger the export */
+        allowed_ips: string[];
+        /** A bearer token required to trigger exports via the API */
+        secret: string;
+    };
+    /** the remote instance details to use when using the import tool */
+    import?: {
+        remote_host: string;
+        deployment: string;
+        secret: string;
+    };
+}
+
+/**
+ * @returns all deployment configs from deployments.json
+ */
+export function getAllDeployments(): Record<string, Deployment> {
+    const deploymentsConfig = readFileSync(path.join(__dirname, '../deployments.json'), 'utf8');
+    const parsedConfig: unknown = JSON.parse(deploymentsConfig);
+    if (typeof parsedConfig !== 'object' || parsedConfig === null) {
+        throw new Error('Invalid deployments configuration');
+    }
+
+    // set .key for each deployment based on the key in deployments.json
+    const deployments = parsedConfig as Record<string, Deployment>;
+    for (const [key, deployment] of Object.entries(deployments)) {
+        deployment.key = key;
+    }
+
+    return deployments;
+}
+
+/**
+ * Retrieve deployment config for a given deployment key, or the first deployment if none is given
+ * @param deploymentKey The key of the deployment to retrieve (as specified in deployments.json)
+ * @param assert Whether to throw an error (true) or return null (false) if the deployment can't be found
+ * @returns Deployment config, or null if not found when assert is false
+ */
+export function getDeployment<TAssert extends boolean = false>(
+    deploymentKey?: string,
+    assert: TAssert = false as TAssert
+): TAssert extends true ? Deployment : Deployment | null {
+    const deployments = getAllDeployments();
+    const deployment = deploymentKey ? deployments[deploymentKey] : Object.values(deployments)[0];
+    if (assert && !deployment) {
+        throw new Error(`Deployment with key "${deploymentKey}" not found`);
+    }
+
+    return deployment as TAssert extends true ? Deployment : Deployment | null;
+}
+
+/**
+ * Runs a command on a deployment's path OUTSIDE OF THE CONTAINER
+ * @param options
+ * @returns success state, stdout, stderr, and a combined log of both
+ */
+export function deploymentExec(options: {
+    deployment: Deployment;
+    /** The command to run using the host's system shell */
+    command: string;
+    /** Args to be added after the command */
+    args: string[];
+    successMessage?: string;
+    errorMessage?: string;
+    pipeInput?: NodeJS.ReadableStream;
+    pipeStdout?: NodeJS.WritableStream;
+}): Promise<DeploymentExecResult> {
+    return new Promise((resolve) => {
+        const result: DeploymentExecResult = { stdout: '', stderr: '', log: '', error: null };
+
+        const child = spawn(options.command, options.args, { cwd: options.deployment.path, shell: true });
+
+        if (options.pipeInput) {
+            options.pipeInput.pipe(child.stdin);
+
+            options.pipeInput.on('error', (err) => {
+                result.log += `\n[EXEC] Error in input stream: ${err.message}`;
+                console.error(`\n[EXEC] Error in input stream: ${err.message}`);
+                child.kill();
+                result.error = new DeploymentExecError(`Error in input stream: ${err.message}`, result);
+                resolve(result);
+            });
+        }
+
+        if (options.pipeStdout) {
+            child.stdout.pipe(options.pipeStdout);
+        } else {
+            child.stdout.on('data', (chunk) => {
+                const text = chunk.toString();
+                result.stdout += text;
+                result.log += text;
+                process.stdout.write(text);
+            });
+        }
+
+        child.stderr.on('data', (chunk) => {
+            const text = chunk.toString();
+            result.stderr += text;
+            result.log += text;
+            process.stderr.write(chalk.red(text));
+        });
+
+        child.on('error', (err) => {
+            result.log += `\n[EXEC] Failed to start process: ${err.message}`;
+            console.error(`\n[EXEC] Failed to start process: ${err.message}`);
+
+            if (options.errorMessage) {
+                result.log += `\n[EXEC] ${options.errorMessage}`;
+                console.error(`\n[EXEC] ${options.errorMessage}`);
+            }
+
+            result.error = new DeploymentExecError(`Failed to start process: ${err.message}`, result);
+            resolve(result);
+        });
+
+        child.on('close', (code) => {
+            if (code !== 0) {
+                result.log += `\n[EXEC] Command failed with exit code ${code}`;
+                console.error(`\n[EXEC] Command failed with exit code ${code}`);
+
+                if (options.errorMessage) {
+                    result.log += `\n[EXEC] ${options.errorMessage}`;
+                    console.error(`\n[EXEC] ${options.errorMessage}`);
+                }
+
+                result.error = new DeploymentExecError(`Command failed with exit code ${code}`, result);
+            } else if (options.successMessage) {
+                result.log += `\n[EXEC] ${options.successMessage}`;
+                console.info(`\n[EXEC] ${options.successMessage}`);
+            }
+
+            resolve(result);
+        });
+    });
+}
+
+/**
+ * Check if the deployment has uncommitted changes
+ * @param deployment target
+ * @returns True if there are uncommitted changes, false otherwise
+ */
+export async function deploymentHasUncommittedChanges(deployment: Deployment): Promise<boolean> {
+    const result = await deploymentExec({
+        deployment,
+        command: 'git',
+        args: ['status', '--porcelain']
+    });
+    return result.stdout.trim() !== '';
+}
+
+/**
+ * Get the current git branch of the deployment so we can
+ * jump back to wherever we were after running migrations
+ * @param deployment target
+ * @param useHash Whether to use the hash of the commit instead of the branch name (e.g. if the deployment is in a detached state)
+ * @returns The current branch name of the deployment (or the commit hash if useHash is true)
+ */
+export async function getCurrentBranch(deployment: Deployment, useHash = false): Promise<string> {
+    const result = await deploymentExec({
+        deployment,
+        command: 'git',
+        args: useHash ? ['rev-parse', 'HEAD'] : ['rev-parse', '--abbrev-ref', 'HEAD']
+    });
+
+    let branchName = result.stdout.trim();
+
+    if (branchName === "HEAD" && !useHash) {
+        branchName = await getCurrentBranch(deployment, true);
+    }
+
+    return branchName;
+}
+
+/**
+ * Checkout to a specific tag/branch/hash in the deployment
+ * @param deployment The deployment to checkout
+ * @param target The tag/branch/hash to checkout to
+ */
+export function checkoutDeploymentTo(deployment: Deployment, target: string): Promise<DeploymentExecResult> {
+    return deploymentExec({
+        deployment,
+        command: 'git',
+        args: ['checkout', target]
+    });
+}
